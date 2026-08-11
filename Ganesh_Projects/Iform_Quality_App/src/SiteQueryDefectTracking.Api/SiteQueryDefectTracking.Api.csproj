@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SiteQueryDefectTracking.Domain\SiteQueryDefectTracking.Domain.csproj" />
+    <ProjectReference Include="..\SiteQueryDefectTracking.Application\SiteQueryDefectTracking.Application.csproj" />
+    <ProjectReference Include="..\SiteQueryDefectTracking.Infrastructure\SiteQueryDefectTracking.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

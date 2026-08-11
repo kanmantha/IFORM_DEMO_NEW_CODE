@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="SiteQueryDefectTracking.Mobile.Pages.LoginPage"
+             Title="Sign in">
+    <ScrollView>
+        <VerticalStackLayout Padding="28" Spacing="18" VerticalOptions="Center">
+            <Label Text="IFORM Site Query"
+                   FontSize="30" FontAttributes="Bold"
+                   HorizontalOptions="Center" />
+            <Label Text="Quality &amp; defect tracking for site engineers"
+                   FontSize="14" TextColor="Gray"
+                   HorizontalOptions="Center" />
+
+            <Border Margin="0,16,0,0"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E1E}"
+                    StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light=#DDDDDD, Dark=#333333}"
+                    Padding="16" StrokeShape="RoundRectangle 12">
+                <VerticalStackLayout Spacing="14">
+                    <Label Text="Username or email" FontSize="13" FontAttributes="Bold" />
+                    <Entry x:Name="UserNameEntry" Placeholder="manager@demo.local"
+                           Keyboard="Email" />
+                    <Label Text="Password" FontSize="13" FontAttributes="Bold" />
+                    <Entry x:Name="PasswordEntry" Placeholder="••••••••"
+                           IsPassword="True" />
+                    <Button x:Name="LoginButton" Text="Sign in"
+                            Clicked="OnLoginClicked"
+                            HeightRequest="48" />
+                    <Label x:Name="StatusLabel" TextColor="Red" IsVisible="False" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="Demo accounts — password: Demo@1234!"
+                   FontSize="11" TextColor="Gray" HorizontalOptions="Center" />
+            <Label Text="manager@demo.local (Manager)"
+                   FontSize="11" TextColor="Gray" HorizontalOptions="Center" />
+            <Label Text="siteengineer@demo.local / engineer2@demo.local (Site Engineer)"
+                   FontSize="11" TextColor="Gray" HorizontalOptions="Center" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

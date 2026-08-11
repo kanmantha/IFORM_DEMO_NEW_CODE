@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SiteQueryDefectTracking.Api/SiteQueryDefectTracking.Api.csproj" />
+    <Project Path="src/SiteQueryDefectTracking.Application/SiteQueryDefectTracking.Application.csproj" />
+    <Project Path="src/SiteQueryDefectTracking.Domain/SiteQueryDefectTracking.Domain.csproj" />
+    <Project Path="src/SiteQueryDefectTracking.Infrastructure/SiteQueryDefectTracking.Infrastructure.csproj" />
+    <Project Path="src/SiteQueryDefectTracking.Mobile/SiteQueryDefectTracking.Mobile.csproj" />
+    <Project Path="src/SiteQueryDefectTracking.Web/SiteQueryDefectTracking.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SiteQueryDefectTracking.IntegrationTests/SiteQueryDefectTracking.IntegrationTests.csproj" />
+    <Project Path="tests/SiteQueryDefectTracking.UnitTests/SiteQueryDefectTracking.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/DatabaseSeeder/DatabaseSeeder.csproj" />
+    <Project Path="tools/ProductCatalogueImporter/ProductCatalogueImporter.csproj" />
+  </Folder>
+</Solution>

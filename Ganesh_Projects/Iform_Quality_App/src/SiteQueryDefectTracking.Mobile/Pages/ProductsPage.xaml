@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:SiteQueryDefectTracking.Mobile.Models"
+             x:Class="SiteQueryDefectTracking.Mobile.Pages.ProductsPage"
+             Title="Product Lookup">
+    <Grid RowDefinitions="Auto,*">
+        <VerticalStackLayout Padding="16,12" Spacing="8">
+            <SearchBar x:Name="ProductSearch" Placeholder="Search code, name, or scan barcode"
+                       SearchButtonPressed="OnSearchClicked" />
+            <Grid ColumnDefinitions="*,Auto">
+                <Label Grid.Column="0" x:Name="CountLabel" FontSize="12" TextColor="Gray" VerticalOptions="Center" />
+                <Button Grid.Column="1" Text="Scan" Clicked="OnScanClicked" />
+            </Grid>
+        </VerticalStackLayout>
+
+        <CollectionView x:Name="ProductList" Grid.Row="1" SelectionMode="Single"
+                        SelectionChanged="OnProductSelected">
+            <CollectionView.EmptyView>
+                <Label Text="No products found." HorizontalOptions="Center" VerticalOptions="Center" TextColor="Gray" />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="models:ProductSummaryDto">
+                    <Border Margin="8,4" Padding="12" StrokeThickness="1"
+                            Stroke="{AppThemeBinding Light=#DDDDDD, Dark=#333333}"
+                            StrokeShape="RoundRectangle 10"
+                            BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E1E}">
+                        <VerticalStackLayout Spacing="3">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Grid.Column="0" Text="{Binding Code}" FontSize="15" FontAttributes="Bold" />
+                                <Border Grid.Column="1" Padding="6,2" StrokeThickness="0"
+                                        BackgroundColor="{AppThemeBinding Light=#EEEEEE, Dark=#2A2A2A}"
+                                        StrokeShape="RoundRectangle 6">
+                                    <Label Text="{Binding Category}" FontSize="11" />
+                                </Border>
+                            </Grid>
+                            <Label Text="{Binding Description}" FontSize="13" />
+                            <Label Text="{Binding Unit}" FontSize="11" TextColor="Gray" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentPage>

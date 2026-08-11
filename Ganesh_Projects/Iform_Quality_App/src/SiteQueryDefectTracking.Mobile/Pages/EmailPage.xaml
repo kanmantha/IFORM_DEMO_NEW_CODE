@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="SiteQueryDefectTracking.Mobile.Pages.EmailPage"
+             Title="Auto Email">
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="12">
+            <Label x:Name="QueryLabel" FontSize="15" FontAttributes="Bold" />
+
+            <Label Text="Template" FontSize="13" FontAttributes="Bold" />
+            <Picker x:Name="TemplatePicker" Title="Select template" />
+
+            <Label Text="Recipient" FontSize="13" FontAttributes="Bold" />
+            <Entry x:Name="RecipientEntry" Placeholder="vendor@example.com" Keyboard="Email" />
+
+            <Button Text="Generate draft" Clicked="OnGenerateClicked" />
+
+            <Border Margin="0,4,0,0" Padding="12" StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light=#DDDDDD, Dark=#333333}"
+                    StrokeShape="RoundRectangle 10"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E1E}">
+                <VerticalStackLayout Spacing="6">
+                    <Label Text="Subject" FontSize="13" FontAttributes="Bold" />
+                    <Entry x:Name="SubjectEntry" />
+                    <Label Text="Body" FontSize="13" FontAttributes="Bold" />
+                    <Editor x:Name="BodyEditor" HeightRequest="180" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Grid ColumnDefinitions="*,16,*">
+                <Button Grid.Column="0" Text="Send" Clicked="OnSendClicked"
+                        BackgroundColor="#27AE60" />
+                <Button Grid.Column="2" Text="Draft only" Clicked="OnDraftClicked" />
+            </Grid>
+            <Label x:Name="StatusLabel" TextColor="Green" IsVisible="False" HorizontalOptions="Center" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

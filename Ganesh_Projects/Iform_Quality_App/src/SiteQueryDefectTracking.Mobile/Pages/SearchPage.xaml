@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:SiteQueryDefectTracking.Mobile.Models"
+             x:Class="SiteQueryDefectTracking.Mobile.Pages.SearchPage"
+             Title="Queries">
+    <Grid RowDefinitions="Auto,*">
+        <VerticalStackLayout Padding="16,12" Spacing="8">
+            <Grid ColumnDefinitions="*,Auto,12,Auto,12,Auto">
+                <SearchBar x:Name="KeywordSearch" Grid.Column="0" Placeholder="Search IPO / product / keyword"
+                           SearchButtonPressed="OnSearchClicked" />
+                <Button Grid.Column="1" Text="Search" Clicked="OnSearchClicked" VerticalOptions="Center" />
+                <Button Grid.Column="3" Text="Filters" Clicked="OnFiltersClicked" VerticalOptions="Center" />
+                <Button Grid.Column="5" Text="Refresh" Clicked="OnRefreshClicked" VerticalOptions="Center" />
+            </Grid>
+        </VerticalStackLayout>
+
+        <CollectionView x:Name="QueryListView" Grid.Row="1" SelectionMode="Single"
+                        SelectionChanged="OnQuerySelected" Margin="0,4,0,0">
+            <CollectionView.EmptyView>
+                <Label Text="No queries found." HorizontalOptions="Center" VerticalOptions="Center" TextColor="Gray" />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="models:QuerySummaryDto">
+                    <Border Margin="8,4" Padding="12" StrokeThickness="1"
+                            Stroke="{AppThemeBinding Light=#DDDDDD, Dark=#333333}"
+                            StrokeShape="RoundRectangle 10"
+                            BackgroundColor="{AppThemeBinding Light=White, Dark=#1E1E1E}">
+                        <VerticalStackLayout Spacing="4">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Grid.Column="0" FontAttributes="Bold" Text="{Binding IPO}" FontSize="15" />
+                                <Border Grid.Column="1" Padding="8,2"
+                                        BackgroundColor="{Binding StatusBrush}" StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 8">
+                                    <Label Text="{Binding StatusLabel}" FontSize="11" TextColor="White" />
+                                </Border>
+                            </Grid>
+                            <Label Text="{Binding SummaryLine}" FontSize="13" />
+                            <Label Text="{Binding ProjectName}" FontSize="12" TextColor="Gray" />
+                            <Grid ColumnDefinitions="*,*">
+                                <Label Grid.Column="0" FontSize="11" TextColor="Gray"
+                                       Text="{Binding RaiseDate, StringFormat='Raised {0:dd MMM yyyy}'}" />
+                                <Label Grid.Column="1" FontSize="11" HorizontalOptions="End"
+                                       Text="{Binding DelayDays, StringFormat='Delay {0} days'}"
+                                       TextColor="{Binding DelayBrush}" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentPage>

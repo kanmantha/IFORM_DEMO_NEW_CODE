@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="SiteQueryDefectTracking.Mobile.Pages.ReportPage"
+             Title="Report Issue">
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="12">
+
+            <Label Text="Project" FontSize="13" FontAttributes="Bold" />
+            <Picker x:Name="ProjectPicker" Title="Select project" />
+
+            <Label Text="Issue type" FontSize="13" FontAttributes="Bold" />
+            <Picker x:Name="IssueTypePicker" Title="Select issue type" />
+
+            <Label Text="IPO" FontSize="13" FontAttributes="Bold" />
+            <Entry x:Name="IPOEntry" Placeholder="e.g. IPO-2406-015" />
+
+            <Grid ColumnDefinitions="*,12,*">
+                <VerticalStackLayout Grid.Column="0" Spacing="4">
+                    <Label Text="Quantity (Nos)" FontSize="13" FontAttributes="Bold" />
+                    <Entry x:Name="QuantityNosEntry" Keyboard="Numeric" Placeholder="e.g. 120" />
+                </VerticalStackLayout>
+                <VerticalStackLayout Grid.Column="2" Spacing="4">
+                    <Label Text="Quantity (Sqm)" FontSize="13" FontAttributes="Bold" />
+                    <Entry x:Name="QuantitySqmEntry" Keyboard="Numeric" Placeholder="e.g. 480.5" />
+                </VerticalStackLayout>
+            </Grid>
+
+            <Label Text="Product code (optional)" FontSize="13" FontAttributes="Bold" />
+            <Entry x:Name="ProductCodeEntry" Placeholder="Search product by code or name" />
+            <CollectionView x:Name="ProductResults" HeightRequest="180" IsVisible="False"
+                            SelectionMode="Single">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <Grid Padding="8,6" ColumnDefinitions="*,Auto">
+                            <Label Text="{Binding .}" FontSize="13" />
+                        </Grid>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+            <Label Text="Dispatch status" FontSize="13" FontAttributes="Bold" />
+            <Picker x:Name="DispatchStatusPicker" Title="Dispatch status" />
+
+            <Grid ColumnDefinitions="*,12,*">
+                <VerticalStackLayout Grid.Column="0" Spacing="4">
+                    <Label Text="Slab target" FontSize="13" FontAttributes="Bold" />
+                    <Entry x:Name="SlabTargetEntry" Placeholder="e.g. Level 3" />
+                </VerticalStackLayout>
+                <VerticalStackLayout Grid.Column="2" Spacing="4">
+                    <Label Text="Slab completed" FontSize="13" FontAttributes="Bold" />
+                    <Entry x:Name="SlabCompletedEntry" Placeholder="e.g. Level 2" />
+                </VerticalStackLayout>
+            </Grid>
+
+            <Label Text="Slab delay (days)" FontSize="13" FontAttributes="Bold" />
+            <Entry x:Name="SlabDelayEntry" Keyboard="Numeric" Placeholder="e.g. 4" />
+
+            <Label Text="Description" FontSize="13" FontAttributes="Bold" />
+            <Editor x:Name="DescriptionEditor" HeightRequest="100" Placeholder="Describe the issue…" />
+
+            <Label Text="Photo (required)" FontSize="13" FontAttributes="Bold" />
+            <Grid ColumnDefinitions="*,16,*">
+                <Button Grid.Column="0" Text="Take photo" Clicked="OnTakePhotoClicked" />
+                <Button Grid.Column="2" Text="Choose" Clicked="OnPickPhotoClicked" />
+            </Grid>
+            <Image x:Name="PhotoPreview" HeightRequest="200" Aspect="AspectFill"
+                   IsVisible="False" />
+            <Label x:Name="PhotoStatus" FontSize="12" TextColor="Gray" />
+
+            <Button x:Name="SubmitButton" Text="Submit Report"
+                    Clicked="OnSubmitClicked" HeightRequest="48" Margin="0,8,0,0" />
+            <Label x:Name="StatusLabel" TextColor="Green" IsVisible="False" HorizontalOptions="Center" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="SiteQueryDefectTracking.Mobile.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:pages="clr-namespace:SiteQueryDefectTracking.Mobile.Pages"
+    Title="IFORM Site Query"
+    Shell.FlyoutBehavior="Disabled">
+
+    <TabBar>
+        <ShellContent Title="Dashboard" Route="dashboard" ContentTemplate="{DataTemplate pages:DashboardPage}"
+                      Icon="dotnet_bot.png" />
+        <ShellContent Title="Report" Route="report" ContentTemplate="{DataTemplate pages:ReportPage}"
+                      Icon="dotnet_bot.png" />
+        <ShellContent Title="Queries" Route="queries" ContentTemplate="{DataTemplate pages:SearchPage}"
+                      Icon="dotnet_bot.png" />
+        <ShellContent Title="Products" Route="products" ContentTemplate="{DataTemplate pages:ProductsPage}"
+                      Icon="dotnet_bot.png" />
+    </TabBar>
+
+</Shell>

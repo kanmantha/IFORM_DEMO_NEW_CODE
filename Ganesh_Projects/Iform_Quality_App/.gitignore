@@ -1,0 +1,50 @@
+# Build results
+*/bin/
+*/obj/
+**/bin/
+**/obj/
+artifacts/
+.publish/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test results
+*.trx
+[Tt]est[Rr]esult*
+coverage/
+*.coverage
+
+# Local app data
+*.db
+*.db-shm
+*.db-wal
+*.log
+logs/
+*.temp
+
+# Secrets
+appsettings.Local.json
+appsettings.*.local.json
+*.user.secrets.json
+
+# User-specific
+*.user
+.vs/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Search engine / misc
+*.DotSettings
+.DS_Store
+
+# NPM / node (if used by tooling)
+node_modules/

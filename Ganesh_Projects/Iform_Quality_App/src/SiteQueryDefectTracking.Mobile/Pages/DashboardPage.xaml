@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:SiteQueryDefectTracking.Mobile.Models"
+             x:Class="SiteQueryDefectTracking.Mobile.Pages.DashboardPage"
+             Title="Dashboard">
+    <Grid RowDefinitions="Auto,*">
+        <VerticalStackLayout Padding="16" Spacing="8">
+            <Grid ColumnDefinitions="Auto,*">
+                <Label Grid.Column="1" x:Name="HeaderLabel" FontSize="20" FontAttributes="Bold" VerticalOptions="Center" />
+            </Grid>
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8" RowSpacing="8">
+                <Border Grid.Column="0" StrokeThickness="0" BackgroundColor="#2980B9" StrokeShape="RoundRectangle 10" Padding="12">
+                    <VerticalStackLayout Spacing="2">
+                        <Label Text="Open" FontSize="12" TextColor="White" />
+                        <Label x:Name="OpenLabel" Text="0" FontSize="22" FontAttributes="Bold" TextColor="White" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border Grid.Column="1" StrokeThickness="0" BackgroundColor="#E67E22" StrokeShape="RoundRectangle 10" Padding="12">
+                    <VerticalStackLayout Spacing="2">
+                        <Label Text="SLA Breach" FontSize="12" TextColor="White" />
+                        <Label x:Name="CriticalLabel" Text="0" FontSize="22" FontAttributes="Bold" TextColor="White" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border Grid.Column="2" StrokeThickness="0" BackgroundColor="#27AE60" StrokeShape="RoundRectangle 10" Padding="12">
+                    <VerticalStackLayout Spacing="2">
+                        <Label Text="Resolved" FontSize="12" TextColor="White" />
+                        <Label x:Name="ResolvedLabel" Text="0" FontSize="22" FontAttributes="Bold" TextColor="White" />
+                    </VerticalStackLayout>
+                </Border>
+            </Grid>
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                <Border StrokeThickness="1" Stroke="{AppThemeBinding Light=#DDDDDD, Dark=#333333}" StrokeShape="RoundRectangle 10" Padding="10">
+                    <VerticalStackLayout Spacing="2">
+                        <Label Text="Avg delay" FontSize="11" TextColor="Gray" />
+                        <Label x:Name="AvgLabel" Text="0 d" FontSize="16" FontAttributes="Bold" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border Grid.Column="1" StrokeThickness="1" Stroke="{AppThemeBinding Light=#DDDDDD, Dark=#333333}" StrokeShape="RoundRectangle 10" Padding="10">
+                    <VerticalStackLayout Spacing="2">
+                        <Label Text="Max delay" FontSize="11" TextColor="Gray" />
+                        <Label x:Name="MaxLabel" Text="0 d" FontSize="16" FontAttributes="Bold" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border Grid.Column="2" StrokeThickness="1" Stroke="{AppThemeBinding Light=#DDDDDD, Dark=#333333}" StrokeShape="RoundRectangle 10" Padding="10">
+                    <VerticalStackLayout Spacing="2">
+                        <Label Text="Resolved today" FontSize="11" TextColor="Gray" />
+                        <Label x:Name="TodayLabel" Text="0" FontSize="16" FontAttributes="Bold" />
+                    </VerticalStackLayout>
+                </Border>
+            </Grid>
+            <Button Text="Refresh" Clicked="OnRefreshClicked" />
+        </VerticalStackLayout>
+
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout Padding="16,0">
+                <Label Text="Open queries" FontSize="15" FontAttributes="Bold" Margin="0,8,0,4" />
+                <VerticalStackLayout x:Name="OpenQueriesPanel" Spacing="4" />
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+</ContentPage>
