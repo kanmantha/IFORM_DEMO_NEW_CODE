@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/IformSiteQuery.Domain/IformSiteQuery.Domain.csproj" />
+    <Project Path="src/IformSiteQuery.Infrastructure/IformSiteQuery.Infrastructure.csproj" />
+    <Project Path="src/IformSiteQuery.Web/IformSiteQuery.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/IformSiteQuery.Tests/IformSiteQuery.Tests.csproj" />
+  </Folder>
+</Solution>
