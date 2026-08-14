@@ -1,0 +1,62 @@
+@model IForm.Domain.Entities.EmailTemplate
+@{
+    ViewData["Title"] = string.IsNullOrWhiteSpace(Model.Name) ? "New Template" : $"Edit: {Model.Name}";
+}
+<div class="d-flex align-items-center mb-3">
+    <a asp-action="Templates" class="btn btn-outline-secondary btn-sm me-2"><i class="bi bi-arrow-left"></i></a>
+    <h1 class="h4 mb-0">@ViewData["Title"]</h1>
+</div>
+
+<form asp-action="EditTemplate" method="post">
+    <input type="hidden" asp-for="Id" />
+    <div asp-validation-summary="ModelOnly" class="text-danger small mb-3"></div>
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label asp-for="Name" class="form-label">Name <span class="text-danger">*</span></label>
+                    <input asp-for="Name" class="form-control" />
+                    <span asp-validation-for="Name" class="text-danger small"></span>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label asp-for="IssueType" class="form-label">Issue Type</label>
+                    <input asp-for="IssueType" class="form-control" placeholder="e.g. Missing" />
+                </div>
+                <div class="col-md-3 mb-3 d-flex align-items-end">
+                    <div class="form-check form-switch">
+                        <input asp-for="IsActive" class="form-check-input" />
+                        <label asp-for="IsActive" class="form-check-label">Active</label>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label asp-for="ToRecipients" class="form-label">To Recipients</label>
+                    <input asp-for="ToRecipients" class="form-control" placeholder="comma-separated emails" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label asp-for="CcRecipients" class="form-label">CC</label>
+                    <input asp-for="CcRecipients" class="form-control" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label asp-for="BccRecipients" class="form-label">BCC</label>
+                    <input asp-for="BccRecipients" class="form-control" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Subject" class="form-label">Subject</label>
+                <input asp-for="Subject" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label asp-for="Body" class="form-label">Body (HTML supported)</label>
+                <textarea asp-for="Body" class="form-control" rows="10"></textarea>
+                <div class="form-text">
+                    Available placeholders: {{QueryNumber}}, {{IpoNumber}}, {{ProjectName}}, {{ProductCode}}, {{ProductName}},
+                    {{IssueType}}, {{Quantity}}, {{Severity}}, {{DelayDays}}, {{RaisedByName}}, {{RaisedDate}}, {{SiteName}}, {{SiteAddress}}
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>Save Template</button>
+        </div>
+    </div>
+</form>
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

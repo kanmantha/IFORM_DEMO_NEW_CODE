@@ -1,0 +1,109 @@
+@model IForm.Application.Common.PagedResult<IForm.Application.DTOs.QueryListItemDto>
+@using IForm.Domain.Enums
+@{
+    ViewData["Title"] = "Site Queries";
+    var search = ViewBag.Search as IForm.Application.DTOs.QuerySearchRequest ?? new IForm.Application.DTOs.QuerySearchRequest();
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0"><i class="bi bi-clipboard-check me-2 text-primary"></i>Site Queries</h1>
+    <a asp-action="Create" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>New</a>
+</div>
+
+<form method="get" asp-action="Index">
+    <div class="search-box">
+        <div class="row g-2">
+            <div class="col-12">
+                <input type="text" name="searchTerm" class="form-control" placeholder="Search IPO, product code, project..." value="@search.SearchTerm" />
+            </div>
+            <div class="col-6 col-md-3">
+                <select name="projectId" class="form-select" asp-items="@(new SelectList(ViewBag.Projects ?? new List<IForm.Application.DTOs.ProjectListItemDto>(), "Id", "ProjectName", search.ProjectId))">
+                    <option value="">All Projects</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <select name="status" class="form-select">
+                    <option value="">All Status</option>
+                    @foreach (var s in Enum.GetValues<QueryStatus>())
+                    {
+                        <option value="@((int)s)" selected="@(search.Status == s)">@s</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <select name="issueType" class="form-select">
+                    <option value="">All Issue Types</option>
+                    @foreach (var t in Enum.GetValues<IssueType>())
+                    {
+                        <option value="@((int)t)" selected="@(search.IssueType == t)">@t</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <select name="sortBy" class="form-select">
+                    <option value="delay" selected="@(search.SortBy == "delay")">Sort: Delay</option>
+                    <option value="date" selected="@(search.SortBy == "date")">Sort: Date</option>
+                    <option value="ipo" selected="@(search.SortBy == "ipo")">Sort: IPO</option>
+                </select>
+            </div>
+        </div>
+        <div class="mt-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>Search</button>
+            <a asp-action="Index" class="btn btn-outline-secondary">Clear</a>
+        </div>
+    </div>
+</form>
+
+@if (!Model.Items.Any())
+{
+    <div class="text-center text-muted py-5">
+        <i class="bi bi-inbox" style="font-size:3rem"></i>
+        <p class="mt-2 mb-0">No queries found.</p>
+    </div>
+}
+else
+{
+    @foreach (var q in Model.Items)
+    {
+        <a asp-action="Details" asp-route-id="@q.Id" class="text-decoration-none">
+            <div class="list-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <span class="lead-title">@q.QueryNumber</span>
+                        <span class="text-muted ms-2">@q.IpoNumber</span>
+                    </div>
+                    <span class="badge sev-severity sev-@q.Severity.ToString().ToLowerInvariant()">@q.Severity</span>
+                </div>
+                <div class="small mt-1">
+                    <div><i class="bi bi-kanban me-1 text-muted"></i>@q.ProjectName</div>
+                    @if (!string.IsNullOrWhiteSpace(q.ProductCode))
+                    {
+                        <div><i class="bi bi-box-seam me-1 text-muted"></i>@q.ProductCode - @q.ProductName</div>
+                    }
+                    <div class="mt-1">
+                        <span class="badge text-bg-light border">@q.IssueType</span>
+                        <span class="badge @(q.Status == QueryStatus.Resolved ? "text-bg-success" : q.Status == QueryStatus.InProgress ? "text-bg-primary" : "text-bg-secondary")">@q.Status</span>
+                        <span class="badge @(q.DelayDays >= 30 ? "text-bg-danger" : q.DelayDays >= 15 ? "text-bg-warning" : "text-bg-light border text-dark")">@q.DelayDays d</span>
+                    </div>
+                </div>
+                <div class="small text-muted mt-1 d-flex justify-content-between">
+                    <span><i class="bi bi-person me-1"></i>@q.RaisedByName</span>
+                    <span>@q.RaisedDate.ToString("dd-MMM-yyyy")</span>
+                </div>
+            </div>
+        </a>
+    }
+
+    <nav aria-label="Pagination">
+        <ul class="pagination justify-content-center">
+            @if (Model.HasPrevious)
+            {
+                <li class="page-item"><a class="page-link" asp-action="Index" asp-route-page="@(Model.Page - 1)">Previous</a></li>
+            }
+            <li class="page-item disabled"><span class="page-link">Page @Model.Page of @Model.TotalPages</span></li>
+            @if (Model.HasNext)
+            {
+                <li class="page-item"><a class="page-link" asp-action="Index" asp-route-page="@(Model.Page + 1)">Next</a></li>
+            }
+        </ul>
+    </nav>
+}

@@ -1,0 +1,48 @@
+@model IReadOnlyList<IForm.Domain.Entities.EmailRecord>
+@{
+    ViewData["Title"] = "Email History";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0"><i class="bi bi-envelope-check me-2 text-primary"></i>Email History</h1>
+    <a asp-action="Compose" class="btn btn-primary"><i class="bi bi-pencil-square me-1"></i>Compose</a>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="text-center text-muted py-5">
+        <i class="bi bi-envelope" style="font-size:3rem"></i>
+        <p class="mt-2 mb-0">No emails yet.</p>
+    </div>
+}
+else
+{
+    <div class="table-card">
+        <table class="table table-hover">
+            <thead><tr><th>Subject</th><th>To</th><th>Status</th><th>Date</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var e in Model)
+                {
+                    <tr>
+                        <td class="small fw-bold">@e.Subject</td>
+                        <td class="small">@e.To</td>
+                        <td>
+                            @if (e.Sent) { <span class="badge text-bg-success">Sent</span> }
+                            else if (e.IsDraft) { <span class="badge text-bg-secondary">Draft</span> }
+                            else { <span class="badge text-bg-danger">Failed</span> }
+                        </td>
+                        <td class="small text-muted">@e.CreatedAt.ToString("dd-MMM-yyyy HH:mm")</td>
+                        <td class="text-end">
+                            @if (e.IsDraft)
+                            {
+                                <form asp-action="Send" method="post" class="d-inline">
+                                    <input type="hidden" name="recordId" value="@e.Id" />
+                                    <button class="btn btn-sm btn-success"><i class="bi bi-send"></i></button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

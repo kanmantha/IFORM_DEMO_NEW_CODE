@@ -1,0 +1,49 @@
+@model IReadOnlyList<IForm.Application.Services.ReportRow>
+@{
+    ViewData["Title"] = ViewData["ReportTitle"]?.ToString() ?? "Report";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center">
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm me-2"><i class="bi bi-arrow-left"></i></a>
+        <h1 class="h4 mb-0">@ViewData["ReportTitle"]</h1>
+    </div>
+    @if (ViewData["ReportKey"] is string key)
+    {
+        <form asp-action="Export" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="report" value="@key" />
+            <button class="btn btn-primary"><i class="bi bi-file-earmark-excel me-1"></i>Export Excel</button>
+        </form>
+    }
+</div>
+
+<div class="table-card table-responsive">
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                @if (Model.Count > 0)
+                {
+                    @foreach (var col in Model[0].Values.Keys)
+                    {
+                        <th>@col</th>
+                    }
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model.Count == 0)
+            {
+                <tr><td class="text-center text-muted py-4">No data.</td></tr>
+            }
+            @foreach (var row in Model)
+            {
+                <tr>
+                    @foreach (var col in row.Values.Keys)
+                    {
+                        <td>@(row.Values[col] ?? "")</td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

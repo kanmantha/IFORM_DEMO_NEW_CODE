@@ -1,0 +1,134 @@
+html {
+  font-size: 15px;
+  position: relative;
+  min-height: 100%;
+}
+
+@media (min-width: 768px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+body {
+  background-color: #f4f6fb;
+  padding-bottom: 70px;
+}
+
+/* --- Severity / status badges --- */
+.badge-severity { font-size: 0.72rem; }
+.sev-normal { background-color: #198754; }
+.sev-watch { background-color: #ffc107; color: #111; }
+.sev-delayed { background-color: #fd7e14; }
+.sev-critical { background-color: #dc3545; }
+.sev-severe { background-color: #6f42c1; }
+
+/* --- Cards / list items (mobile-first touch targets) --- */
+.list-item {
+  background: #fff;
+  border: 1px solid #e3e7f0;
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.65rem;
+  transition: box-shadow 0.15s ease;
+}
+.list-item:hover { box-shadow: 0 0.25rem 0.75rem rgba(13, 110, 253, 0.08); }
+.list-item .lead-title { font-weight: 600; color: #0d6efd; }
+
+.stat-card {
+  background: #fff;
+  border: 1px solid #e3e7f0;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  height: 100%;
+}
+.stat-card .stat-value { font-size: 1.6rem; font-weight: 700; }
+.stat-card .stat-label { color: #6c757d; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* --- Bottom navigation (mobile PWA feel) --- */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid #e3e7f0;
+  display: flex;
+  justify-content: space-around;
+  padding: 0.4rem 0 calc(0.4rem + env(safe-area-inset-bottom));
+  z-index: 1030;
+}
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #6c757d;
+  text-decoration: none;
+  font-size: 0.68rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+}
+.bottom-nav-item i { font-size: 1.3rem; }
+.bottom-nav-item.active, .bottom-nav-item:hover { color: #0d6efd; }
+
+/* --- Search box --- */
+.search-box {
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #e3e7f0;
+  margin-bottom: 1rem;
+}
+.search-box .form-label { font-weight: 600; font-size: 0.85rem; }
+
+/* --- Tables (desktop) --- */
+.table-card {
+  background: #fff;
+  border: 1px solid #e3e7f0;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+.table-card .table { margin-bottom: 0; }
+.table-card .table thead th {
+  background: #f8f9fc;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6c757d;
+}
+
+/* --- Auth pages --- */
+.auth-wrapper {
+  min-height: 80vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+}
+
+/* --- Photos --- */
+.photo-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  border: 1px solid #e3e7f0;
+}
+
+/* Misc */
+.clickable { cursor: pointer; }
+.timeline { list-style: none; padding-left: 0; }
+.timeline li { position: relative; padding-left: 1.5rem; margin-bottom: 0.75rem; }
+.timeline li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: #0d6efd;
+}

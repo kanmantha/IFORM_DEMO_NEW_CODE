@@ -1,0 +1,124 @@
+@model IForm.Application.DTOs.CreateQueryRequest
+@using IForm.Domain.Enums
+@{
+    ViewData["Title"] = "Report Site Query";
+    var projects = ViewBag.Projects as IReadOnlyList<IForm.Application.DTOs.ProjectListItemDto> ?? new List<IForm.Application.DTOs.ProjectListItemDto>();
+    var ipos = ViewBag.Ipos as IReadOnlyList<IForm.Application.DTOs.IpoListItemDto> ?? new List<IForm.Application.DTOs.IpoListItemDto>();
+    var products = ViewBag.Products as IReadOnlyList<IForm.Application.DTOs.ProductListItemDto> ?? new List<IForm.Application.DTOs.ProductListItemDto>();
+}
+<div class="d-flex align-items-center mb-3">
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm me-2"><i class="bi bi-arrow-left"></i></a>
+    <h1 class="h4 mb-0"><i class="bi bi-plus-circle me-2 text-primary"></i>Report Site Query</h1>
+</div>
+
+<form asp-action="Create" method="post" enctype="multipart/form-data">
+    <div asp-validation-summary="ModelOnly" class="text-danger small mb-3"></div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-white fw-bold">Query Details</div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">Project <span class="text-danger">*</span></label>
+                <select asp-for="ProjectId" class="form-select" asp-items="@(new SelectList(projects, "Id", "ProjectName"))">
+                    <option value="">Select project...</option>
+                </select>
+                <span asp-validation-for="ProjectId" class="text-danger small"></span>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label asp-for="IpoNumber" class="form-label">IPO Number <span class="text-danger">*</span></label>
+                    <input asp-for="IpoNumber" class="form-control" list="ipo-list" placeholder="e.g. IPO-1001" />
+                    <datalist id="ipo-list">
+                        @foreach (var i in ipos) { <option value="@i.IpoNumber">@i.ProjectName</option> }
+                    </datalist>
+                    <span asp-validation-for="IpoNumber" class="text-danger small"></span>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Issue Type <span class="text-danger">*</span></label>
+                    <select asp-for="IssueType" class="form-select">
+                        @foreach (var t in Enum.GetValues<IssueType>())
+                        {
+                            <option value="@((int)t)">@t</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Product Code</label>
+                    <input asp-for="ProductCode" class="form-control" list="product-list" placeholder="Search product code" />
+                    <datalist id="product-list">
+                        @foreach (var p in products) { <option value="@p.ProductCode">@p.ProductName</option> }
+                    </datalist>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label asp-for="ProductName" class="form-label">Product Name</label>
+                    <input asp-for="ProductName" class="form-control" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label asp-for="QuantityNos" class="form-label">Quantity (Nos)</label>
+                    <input asp-for="QuantityNos" class="form-control" type="number" step="0.01" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label asp-for="QuantitySqm" class="form-label">Quantity (SQM)</label>
+                    <input asp-for="QuantitySqm" class="form-control" type="number" step="0.01" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label asp-for="DispatchStatus" class="form-label">Dispatch Status</label>
+                    <select asp-for="DispatchStatus" class="form-select">
+                        @foreach (var d in Enum.GetValues<DispatchStatus>())
+                        {
+                            <option value="@((int)d)">@d</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-white fw-bold">Slab & Photos</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label asp-for="SlabTargetCastingDate" class="form-label">Target Casting Date</label>
+                    <input asp-for="SlabTargetCastingDate" type="date" class="form-control" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label asp-for="SlabCompletedDate" class="form-label">Casting Completed Date</label>
+                    <input asp-for="SlabCompletedDate" type="date" class="form-control" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Photos (up to 5)</label>
+                <input type="file" name="photos" class="form-control" accept="image/*" multiple capture="environment" />
+                <div class="form-text">Capture or upload photos of the issue. Images are compressed automatically.</div>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Comments" class="form-label">Comments / Description</label>
+                <textarea asp-for="Comments" class="form-control" rows="4"></textarea>
+            </div>
+            <input type="hidden" asp-for="RaisedFrom" value="Mobile" />
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-lg w-100 mb-4"><i class="bi bi-send me-1"></i>Submit Query</button>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        $('#ProductCode').on('input', function () {
+            var code = $(this).val();
+            $('#product-list option').each(function () {
+                if ($(this).val() === code) {
+                    var opts = $('#product-list').find('option');
+                    var match = opts.filter(function () { return $(this).val() === code; });
+                    if (match.length) { /* autofill via datalist selection */ }
+                }
+            });
+        });
+    </script>
+}

@@ -1,0 +1,38 @@
+@using Microsoft.AspNetCore.Identity
+<ul class="navbar-nav align-items-lg-center">
+    @if (User.Identity!.IsAuthenticated)
+    {
+        <li class="nav-item">
+            <span class="nav-link text-white-50 small d-none d-lg-inline">
+                <i class="bi bi-building me-1"></i>@(Context.Items["TenantName"] ?? "Platform")
+                <span class="badge text-bg-light ms-1">@(Context.Items["PlanName"] ?? "FREE")</span>
+            </span>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" asp-controller="Notifications" asp-action="Index" title="Notifications">
+                <i class="bi bi-bell"></i>
+            </a>
+        </li>
+        <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                <i class="bi bi-person-circle me-1"></i>@User.Identity.Name
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" asp-controller="Account" asp-action="Profile">Profile</a></li>
+                <li><a class="dropdown-item" asp-controller="Account" asp-action="ChangePassword">Change Password</a></li>
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                    <form class="d-inline" asp-controller="Account" asp-action="Logout" method="post">
+                        <button type="submit" class="dropdown-item">Logout</button>
+                    </form>
+                </li>
+            </ul>
+        </li>
+    }
+    else
+    {
+        <li class="nav-item">
+            <a class="nav-link" asp-controller="Account" asp-action="Login">Login</a>
+        </li>
+    }
+</ul>

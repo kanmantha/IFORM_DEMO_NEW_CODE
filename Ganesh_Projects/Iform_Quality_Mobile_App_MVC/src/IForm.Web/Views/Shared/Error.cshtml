@@ -1,0 +1,13 @@
+﻿@{
+    ViewData["Title"] = "Error";
+}
+<div class="text-center py-5">
+    <i class="bi bi-exclamation-triangle text-warning" style="font-size:4rem"></i>
+    <h1 class="h3 mt-3">Something went wrong</h1>
+    @if (ViewData["StatusCode"] != null)
+    {
+        <p class="text-muted">HTTP Status: @ViewData["StatusCode"]</p>
+    }
+    <p class="text-muted">An unexpected error occurred. Please try again or contact the administrator.</p>
+    <a asp-controller="Dashboard" asp-action="Index" class="btn btn-primary">Back to Dashboard</a>
+</div>

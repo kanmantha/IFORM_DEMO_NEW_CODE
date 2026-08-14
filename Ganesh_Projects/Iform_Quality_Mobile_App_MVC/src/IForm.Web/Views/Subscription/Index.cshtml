@@ -1,0 +1,82 @@
+@model IForm.Application.DTOs.TenantSubscriptionViewDto
+@using IForm.Domain.Enums
+@{
+    ViewData["Title"] = "Subscription";
+}
+<h1 class="h4 mb-3"><i class="bi bi-credit-card me-2 text-primary"></i>Subscription</h1>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="mb-0">@(Model.Plan?.PlanName ?? "No Plan")</h5>
+                <span class="badge text-bg-light border mt-1">@(Model.Plan?.Tier ?? PlanTier.Free)</span>
+            </div>
+            <div class="text-end">
+                <div class="fw-bold fs-5">@(Model.Plan?.Price.ToString("0.##") ?? "0") @(Model.Plan?.Currency ?? "")</div>
+                <div class="small text-muted">@(Model.Plan?.BillingCycle ?? BillingCycle.Yearly)</div>
+            </div>
+        </div>
+        <hr />
+        @if (Model.Subscription != null)
+        {
+            <div class="row g-2 small">
+                <div class="col-6"><span class="text-muted">Status</span><div class="fw-bold">@Model.Subscription.Status</div></div>
+                <div class="col-6"><span class="text-muted">Renewal</span><div class="fw-bold">@(Model.Subscription.RenewalDate?.ToString("dd-MMM-yyyy") ?? "-")</div></div>
+                <div class="col-6"><span class="text-muted">Payment</span><div class="fw-bold">@Model.Subscription.PaymentStatus</div></div>
+                <div class="col-6">
+                    <span class="text-muted">Days Remaining</span>
+                    <div class="fw-bold @(Model.DaysRemaining is int d && d < 7 ? "text-danger" : "text-success")">@(Model.DaysRemaining?.ToString() ?? "-")</div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted small mb-0">No active subscription.</p>
+        }
+    </div>
+</div>
+
+@if (Model.AvailablePlans.Any())
+{
+    <h5 class="mt-4 mb-2">Available Plans</h5>
+    <div class="row g-3">
+        @foreach (var plan in Model.AvailablePlans)
+        {
+            var current = Model.Plan?.Id == plan.Id;
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100 @(current ? "border-primary" : "")">
+                    <div class="card-body">
+                        <h6 class="fw-bold">@plan.PlanName @(current ? "<span class='badge text-bg-primary'>Current</span>" : "")</h6>
+                        <div class="fs-4 fw-bold">@plan.Price.ToString("0.##") @plan.Currency</div>
+                        <small class="text-muted">@plan.BillingCycle</small>
+                        <ul class="small mt-3 mb-3 ps-3">
+                            <li>Up to @(plan.MaxUsers == int.MaxValue ? "unlimited" : plan.MaxUsers.ToString()) users</li>
+                            <li>Up to @(plan.MaxProjects == int.MaxValue ? "unlimited" : plan.MaxProjects.ToString()) projects</li>
+                            <li>@(plan.AllowEot ? "EOT claims" : "No EOT") · @(plan.AllowDocuments ? "Documents" : "No documents")</li>
+                            <li>@(plan.AllowAdvancedReports ? "Advanced reports" : "Basic reports")</li>
+                            <li>@(plan.AllowAuditLogs ? "Audit logs" : "No audit logs")</li>
+                        </ul>
+                        @if (!current && User.IsInRole("TenantAdmin"))
+                        {
+                            <form asp-action="ChangePlan" method="post">
+                                <input type="hidden" name="planId" value="@plan.Id" />
+                                <button class="btn btn-outline-primary btn-sm w-100" type="submit">Switch to @plan.PlanName</button>
+                            </form>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<h5 class="mt-4 mb-2">Usage</h5>
+<div class="row g-2 text-center">
+    <div class="col-3 col-md-2"><div class="stat-card"><div class="stat-value">@Model.Usage.UserCount/@(Model.Plan?.MaxUsers.ToString() ?? "∞")</div><div class="stat-label">Users</div></div></div>
+    <div class="col-3 col-md-2"><div class="stat-card"><div class="stat-value">@Model.Usage.ProjectCount/@(Model.Plan?.MaxProjects.ToString() ?? "∞")</div><div class="stat-label">Projects</div></div></div>
+    <div class="col-3 col-md-2"><div class="stat-card"><div class="stat-value">@Model.Usage.QueryCount</div><div class="stat-label">Queries</div></div></div>
+    <div class="col-3 col-md-2"><div class="stat-card"><div class="stat-value">@Model.Usage.ProductCount</div><div class="stat-label">Products</div></div></div>
+    <div class="col-6 col-md-2"><div class="stat-card"><div class="stat-value">@(Model.Usage.StorageBytes / 1024 / 1024) MB</div><div class="stat-label">Storage</div></div></div>
+    <div class="col-6 col-md-2"><div class="stat-card"><div class="stat-value">@Model.Usage.ManagerCount M</div><div class="stat-label">Managers</div></div></div>
+</div>

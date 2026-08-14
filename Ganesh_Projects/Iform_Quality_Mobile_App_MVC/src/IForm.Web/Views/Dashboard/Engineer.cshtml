@@ -1,0 +1,44 @@
+@model IForm.Application.DTOs.DashboardDto
+@{
+    ViewData["Title"] = "Dashboard";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0"><i class="bi bi-speedometer2 me-2 text-primary"></i>Dashboard</h1>
+    <a asp-controller="Queries" asp-action="Create" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Report Query</a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-4">
+        <div class="stat-card"><div class="stat-value text-primary">@Model.OpenQueries</div><div class="stat-label">My Open</div></div>
+    </div>
+    <div class="col-4">
+        <div class="stat-card"><div class="stat-value text-success">@Model.ResolvedQueries</div><div class="stat-label">Resolved</div></div>
+    </div>
+    <div class="col-4">
+        <div class="stat-card"><div class="stat-value text-danger">@Model.CriticalQueries</div><div class="stat-label">Critical</div></div>
+    </div>
+</div>
+
+<h5 class="mt-4 mb-2">Quick Actions</h5>
+<div class="row g-3">
+    <div class="col-6 col-md-3">
+        <a asp-controller="Queries" asp-action="Create" class="text-decoration-none">
+            <div class="card text-center p-3"><i class="bi bi-plus-circle text-primary mb-1" style="font-size:1.8rem"></i><span class="small">New Query</span></div>
+        </a>
+    </div>
+    <div class="col-6 col-md-3">
+        <a asp-controller="Queries" asp-action="Index" class="text-decoration-none">
+            <div class="card text-center p-3"><i class="bi bi-search text-success mb-1" style="font-size:1.8rem"></i><span class="small">Search Queries</span></div>
+        </a>
+    </div>
+    <div class="col-6 col-md-3">
+        <a asp-controller="Products" asp-action="Index" class="text-decoration-none">
+            <div class="card text-center p-3"><i class="bi bi-box-seam text-warning mb-1" style="font-size:1.8rem"></i><span class="small">Product Codes</span></div>
+        </a>
+    </div>
+    <div class="col-6 col-md-3">
+        <a asp-controller="Projects" asp-action="Index" class="text-decoration-none">
+            <div class="card text-center p-3"><i class="bi bi-kanban text-info mb-1" style="font-size:1.8rem"></i><span class="small">Projects</span></div>
+        </a>
+    </div>
+</div>

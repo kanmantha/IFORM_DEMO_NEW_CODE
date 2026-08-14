@@ -1,0 +1,32 @@
+@model IReadOnlyList<IForm.Application.DTOs.SubscriptionPlanDto>
+@using IForm.Domain.Enums
+@{
+    ViewData["Title"] = "Subscription Plans";
+}
+<h1 class="h4 mb-3"><i class="bi bi-credit-card-2-front me-2 text-primary"></i>Subscription Plans</h1>
+
+<div class="table-card table-responsive">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Plan</th><th>Tier</th><th>Price</th><th>Cycle</th><th>Users</th><th>Projects</th><th>Storage</th><th>EOT</th><th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var p in Model)
+            {
+                <tr>
+                    <td class="fw-bold">@p.PlanName</td>
+                    <td><span class="badge text-bg-light border">@p.Tier</span></td>
+                    <td>@p.Price.ToString("0.##") @p.Currency</td>
+                    <td>@p.BillingCycle</td>
+                    <td>@(p.MaxUsers == int.MaxValue ? "Unlimited" : p.MaxUsers.ToString())</td>
+                    <td>@(p.MaxProjects == int.MaxValue ? "Unlimited" : p.MaxProjects.ToString())</td>
+                    <td>@(p.MaxStorageBytes == long.MaxValue ? "Unlimited" : $"{p.MaxStorageBytes / 1024 / 1024} MB")</td>
+                    <td>@(p.AllowEot ? "Yes" : "No")</td>
+                    <td><span class="badge @(p.IsActive ? "text-bg-success" : "text-bg-secondary")">@(p.IsActive ? "Active" : "Inactive")</span></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

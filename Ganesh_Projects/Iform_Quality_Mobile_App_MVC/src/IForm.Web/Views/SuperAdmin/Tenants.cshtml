@@ -1,0 +1,38 @@
+@model IReadOnlyList<IForm.Application.DTOs.TenantListItemDto>
+@using IForm.Domain.Enums
+@{
+    ViewData["Title"] = "Tenants";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0"><i class="bi bi-buildings me-2 text-primary"></i>Tenants</h1>
+    <a asp-action="CreateTenant" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>New Tenant</a>
+</div>
+
+<div class="table-card table-responsive">
+    <table class="table table-hover">
+        <thead><tr><th>Tenant</th><th>Plan</th><th>Status</th><th>Users</th><th>Projects</th><th>Created</th></tr></thead>
+        <tbody>
+            @if (!Model.Any())
+            {
+                <tr><td colspan="6" class="text-center text-muted py-4">No tenants.</td></tr>
+            }
+            @foreach (var t in Model)
+            {
+                <tr>
+                    <td>
+                        <div class="fw-bold">@t.Name</div>
+                        <div class="small text-muted">@t.Email</div>
+                    </td>
+                    <td><span class="badge text-bg-light border">@t.PlanName</span></td>
+                    <td>
+                        <span class="badge @(t.Status == TenantStatus.Active ? "text-bg-success" : "text-bg-danger")">@t.Status</span>
+                        @if (t.SubscriptionStatus == SubscriptionStatus.Expired) { <span class="badge text-bg-warning">Expired</span> }
+                    </td>
+                    <td>@t.UserCount</td>
+                    <td>@t.ProjectCount</td>
+                    <td class="small text-muted">@t.CreatedAt.ToString("dd-MMM-yyyy")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

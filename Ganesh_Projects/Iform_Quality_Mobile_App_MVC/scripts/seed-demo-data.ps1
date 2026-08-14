@@ -118,6 +118,16 @@ New-Query 'IPO-3002' $p1 4 'DUAA0001' 'Square Washer' 1200 '2026-07-09' 'Dispatc
 New-Query 'IPO-4001' $p2 1 'DEDA0001' 'Low Control Brace' 60 '2026-06-24' 'Long-delayed missing braces'
 New-Query 'IPO-4001' $p2 3 'DQAE2000' 'Plumbing Wall Brace 2000' 12 $null 'Design review pending, no slab date'
 
+# --- Manager (BRD role) ------------------------------------------------------
+Write-Host 'Seeding manager ...' -ForegroundColor Cyan
+$usersPage = & curl.exe -s -b $jar -c $jar "$BaseUrl/Users"
+if (Query-Exists $usersPage 'manager@iform.example.com') {
+    Write-Host '  manager already exists.' -ForegroundColor DarkGray
+} else {
+    $loc = Post '/Users/Create' 'FullName=Demo Manager&Email=manager@iform.example.com&UserName=manager&Password=Mgr%4012345&Role=Manager&Designation=Project%20Manager&EmployeeCode=MGR-01'
+    Write-Host '  created manager (Manager role).' -ForegroundColor DarkGray
+}
+
 # --- Second engineer ----------------------------------------------------------
 Write-Host 'Seeding engineer ...' -ForegroundColor Cyan
 $usersPage = & curl.exe -s -b $jar -c $jar "$BaseUrl/Users"

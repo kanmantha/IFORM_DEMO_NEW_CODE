@@ -1,0 +1,216 @@
+@model IForm.Application.DTOs.EotDetailDto
+@using IForm.Domain.Enums
+@{
+    ViewData["Title"] = Model.EotNumber;
+    var transitions = new Dictionary<EotStatus, EotStatus[]>
+    {
+        [EotStatus.Draft] = new[] { EotStatus.Submitted, EotStatus.Cancelled },
+        [EotStatus.Submitted] = new[] { EotStatus.UnderReview },
+        [EotStatus.UnderReview] = new[] { EotStatus.ClientSignoffPending, EotStatus.ReturnedForCorrection, EotStatus.Rejected },
+        [EotStatus.ClientSignoffPending] = new[] { EotStatus.ContractsReview, EotStatus.ReturnedForCorrection, EotStatus.Rejected },
+        [EotStatus.ContractsReview] = new[] { EotStatus.Approved, EotStatus.ReturnedForCorrection, EotStatus.Rejected },
+        [EotStatus.ReturnedForCorrection] = new[] { EotStatus.Submitted, EotStatus.Cancelled },
+    };
+}
+<div class="d-flex align-items-center mb-3">
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm me-2"><i class="bi bi-arrow-left"></i></a>
+    <h1 class="h4 mb-0">@Model.EotNumber</h1>
+    <span class="badge @(Model.Status == EotStatus.Approved ? "text-bg-success" : Model.Status is EotStatus.Rejected or EotStatus.Cancelled ? "text-bg-danger" : Model.Status == EotStatus.Draft ? "text-bg-secondary" : "text-bg-primary") ms-2">@Model.Status</span>
+    @if (Model.ClientApproval != ClientApprovalStatus.NotStarted)
+    {
+        <span class="badge @(Model.ClientApproval == ClientApprovalStatus.Approved ? "text-bg-success" : "text-bg-secondary") ms-2">Client: @Model.ClientApproval</span>
+    }
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>EOT Details</strong></div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr><th class="text-muted w-40">Project</th><td>@Model.ProjectName</td></tr>
+                        <tr><th class="text-muted">Client EOT No.</th><td>@Model.ClientEotNumber</td></tr>
+                        <tr><th class="text-muted">Financial Year</th><td>@Model.FinancialYear</td></tr>
+                        <tr><th class="text-muted">Revision</th><td>@Model.RevisionNumber</td></tr>
+                        <tr><th class="text-muted">Scenario</th><td>@Model.Scenario</td></tr>
+                        <tr><th class="text-muted">Category</th><td>@Model.Category</td></tr>
+                        <tr><th class="text-muted">SPA Date</th><td>@(Model.SpaDate?.ToString("dd-MMM-yyyy") ?? "-")</td></tr>
+                        <tr><th class="text-muted">Design Revision</th><td>@(Model.DesignRevisionDate?.ToString("dd-MMM-yyyy") ?? "-")</td></tr>
+                        <tr><th class="text-muted">Delay</th><td>@(Model.DelayDays?.ToString("0.##") ?? "-") days</td></tr>
+                        <tr><th class="text-muted">Cost Escalation</th><td>@(Model.CostEscalation?.ToString("0.##") ?? "-")</td></tr>
+                        <tr><th class="text-muted">Time Impact</th><td>@(Model.EstimatedTimeImpactDays?.ToString("0.##") ?? "-") days</td></tr>
+                        <tr><th class="text-muted">Cost Impact</th><td>@Model.EstimatedCostImpact</td></tr>
+                        <tr><th class="text-muted">Reason</th><td>@Model.Reason</td></tr>
+                        <tr><th class="text-muted">Reference</th><td>@Model.Reference</td></tr>
+                        <tr><th class="text-muted">Change Proposed By</th><td>@Model.ChangeProposedBy</td></tr>
+                        @if (!string.IsNullOrWhiteSpace(Model.Remarks)) { <tr><th class="text-muted">Remarks</th><td>@Model.Remarks</td></tr> }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (User.IsInRole("TenantAdmin"))
+        {
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white"><strong>Actions</strong></div>
+                <div class="card-body">
+                    @if (Model.Status == EotStatus.Draft)
+                    {
+                        <form asp-action="Submit" method="post" class="d-inline">
+                            <input type="hidden" name="id" value="@Model.Id" />
+                            <button class="btn btn-primary" @(Model.HasRequiredDocuments ? "" : "disabled title='Upload all mandatory documents first'")>
+                                <i class="bi bi-send me-1"></i>Submit for Review
+                            </button>
+                        </form>
+                        @if (!Model.HasRequiredDocuments)
+                        {
+                            <span class="small text-danger d-block mt-1">Mandatory documents are pending - EOT cannot be submitted yet.</span>
+                        }
+                    }
+
+                    @if (transitions.TryGetValue(Model.Status, out var allowed))
+                    {
+                        <form asp-action="Transition" method="post" class="mt-3">
+                            <input type="hidden" name="id" value="@Model.Id" />
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <select name="newStatus" class="form-select">
+                                        @foreach (var s in allowed)
+                                        {
+                                            <option value="@((int)s)">@s</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-outline-primary w-100" type="submit">Transition</button>
+                                </div>
+                                <div class="col-12">
+                                    <input name="remarks" class="form-control" placeholder="Remarks (optional)" />
+                                </div>
+                            </div>
+                        </form>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>Scope Variations (@Model.ScopeVariations.Count)</strong>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <thead><tr><th>Original</th><th>Revised</th><th>Net</th><th>Unit</th><th>Reference</th></tr></thead>
+                    <tbody>
+                        @if (!Model.ScopeVariations.Any())
+                        {
+                            <tr><td colspan="5" class="text-center text-muted">No scope variations.</td></tr>
+                        }
+                        @foreach (var sv in Model.ScopeVariations)
+                        {
+                            <tr>
+                                <td class="small">@sv.OriginalApprovedScope</td>
+                                <td class="small">@sv.RevisedScope</td>
+                                <td class="@(sv.NetScopeVariation > 0 ? "text-success fw-bold" : sv.NetScopeVariation < 0 ? "text-danger fw-bold" : "")">@sv.NetScopeVariation</td>
+                                <td>@sv.Unit</td>
+                                <td class="small">@sv.RevisionReference</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                @if (User.IsInRole("TenantAdmin") && Model.Status == EotStatus.Draft)
+                {
+                    <form asp-action="AddScopeVariation" method="post" class="mt-2">
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <input name="OriginalApprovedScope" class="form-control" placeholder="Original scope" />
+                            </div>
+                            <div class="col-md-6">
+                                <input name="RevisedScope" class="form-control" placeholder="Revised scope" />
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <input name="ScopeAddition" type="number" step="0.01" class="form-control" placeholder="Addition" />
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <input name="ScopeReduction" type="number" step="0.01" class="form-control" placeholder="Reduction" />
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <input name="Unit" class="form-control" placeholder="Unit" value="nos" />
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <input name="RevisionReference" class="form-control" placeholder="Reference" />
+                            </div>
+                            <div class="col-12">
+                                <button class="btn btn-outline-primary" type="submit"><i class="bi bi-plus-lg me-1"></i>Add Variation</button>
+                            </div>
+                        </div>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Documents (@Model.Documents.Count)</strong></div>
+            <div class="card-body">
+                @if (User.IsInRole("TenantAdmin"))
+                {
+                    <form asp-action="UploadDocument" method="post" enctype="multipart/form-data" class="mb-3">
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <div class="row g-2">
+                            <div class="col-7">
+                                <input type="file" name="file" class="form-control form-control-sm" required />
+                            </div>
+                            <div class="col-5">
+                                <select name="category" class="form-select form-select-sm">
+                                    @foreach (var c in Enum.GetValues<DocumentCategory>())
+                                    {
+                                        <option value="@((int)c)">@c</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <button class="btn btn-outline-primary btn-sm w-100" type="submit"><i class="bi bi-upload me-1"></i>Upload Document</button>
+                            </div>
+                        </div>
+                    </form>
+                }
+
+                @if (!Model.Documents.Any())
+                {
+                    <p class="text-muted small mb-0">No documents uploaded.</p>
+                }
+                @foreach (var d in Model.Documents)
+                {
+                    <div class="border rounded p-2 mb-2 d-flex justify-content-between align-items-center">
+                        <div class="small">
+                            <div class="fw-bold">@d.FileName</div>
+                            <div class="text-muted">@d.Category · @(d.SizeBytes / 1024) KB</div>
+                        </div>
+                        <a asp-controller="Files" asp-action="Download" asp-route-path="@d.FilePath" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i></a>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Status History</strong></div>
+            <div class="card-body">
+                <ul class="timeline">
+                    @foreach (var h in Model.StatusHistory)
+                    {
+                        <li>
+                            <div class="fw-bold">@h.OldStatus → @h.NewStatus</div>
+                            <div class="small text-muted">@h.ChangedByName · @h.ChangedDateTime.ToString("dd-MMM-yyyy HH:mm")</div>
+                            @if (!string.IsNullOrWhiteSpace(h.Remarks)) { <div class="small">@h.Remarks</div> }
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>

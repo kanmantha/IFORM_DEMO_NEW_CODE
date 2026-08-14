@@ -8,6 +8,18 @@ public static class AppRoles
     public const string SiteEngineer = "SiteEngineer";
 
     public static readonly IReadOnlyList<string> All = new[] { SuperAdmin, TenantAdmin, Manager, SiteEngineer };
+
+    /// <summary>Friendly labels matching the BRD role names (Site Engineer, Manager) for display in the UI.</summary>
+    private static readonly IReadOnlyDictionary<string, string> DisplayNames = new Dictionary<string, string>
+    {
+        [SuperAdmin] = "Super Admin",
+        [TenantAdmin] = "Tenant Admin",
+        [Manager] = "Manager",
+        [SiteEngineer] = "Site Engineer"
+    };
+
+    public static string DisplayName(string role) =>
+        DisplayNames.TryGetValue(role, out var name) ? name : role;
 }
 
 public enum QueryStatus

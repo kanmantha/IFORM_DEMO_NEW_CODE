@@ -1,0 +1,71 @@
+@model IForm.Application.Common.PagedResult<IForm.Application.DTOs.ProjectListItemDto>
+@using IForm.Domain.Enums
+@{
+    ViewData["Title"] = "Projects";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0"><i class="bi bi-kanban me-2 text-primary"></i>Projects</h1>
+    @if (User.IsInRole("TenantAdmin"))
+    {
+        <a asp-action="Create" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>New</a>
+    }
+</div>
+
+<form method="get" asp-action="Index" class="search-box">
+    <div class="row g-2">
+        <div class="col-8">
+            <input type="text" name="term" class="form-control" placeholder="Search project..." value="@Context.Request.Query["term"]" />
+        </div>
+        <div class="col-4">
+            <button class="btn btn-primary w-100" type="submit"><i class="bi bi-search"></i></button>
+        </div>
+    </div>
+</form>
+
+@if (!Model.Items.Any())
+{
+    <div class="text-center text-muted py-5">
+        <i class="bi bi-kanban" style="font-size:3rem"></i>
+        <p class="mt-2 mb-0">No projects found.</p>
+    </div>
+}
+else
+{
+    @foreach (var p in Model.Items)
+    {
+        <a asp-action="Details" asp-route-id="@p.Id" class="text-decoration-none">
+            <div class="list-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="lead-title">@p.ProjectName</div>
+                        <div class="small text-muted">@p.ProjectCode</div>
+                    </div>
+                    <span class="badge @(p.Status == ProjectStatus.Active ? "text-bg-success" : p.Status == ProjectStatus.OnHold ? "text-bg-warning" : "text-bg-secondary")">@p.Status</span>
+                </div>
+                <div class="small mt-2 text-muted">
+                    @if (!string.IsNullOrWhiteSpace(p.Client)) { <div><i class="bi bi-person me-1"></i>@p.Client</div> }
+                    @if (!string.IsNullOrWhiteSpace(p.Location)) { <div><i class="bi bi-geo-alt me-1"></i>@p.Location</div> }
+                    <div class="mt-1 d-flex gap-2">
+                        <span class="badge text-bg-secondary">@p.TotalQueries queries</span>
+                        <span class="badge text-bg-warning">@p.OpenQueries open</span>
+                        <span class="badge text-bg-success">@p.ResolvedQueries resolved</span>
+                    </div>
+                </div>
+            </div>
+        </a>
+    }
+
+    <nav aria-label="Pagination" class="mt-3">
+        <ul class="pagination justify-content-center">
+            @if (Model.HasPrevious)
+            {
+                <li class="page-item"><a class="page-link" asp-action="Index" asp-route-page="@(Model.Page - 1)">Previous</a></li>
+            }
+            <li class="page-item disabled"><span class="page-link">@Model.Page / @Model.TotalPages</span></li>
+            @if (Model.HasNext)
+            {
+                <li class="page-item"><a class="page-link" asp-action="Index" asp-route-page="@(Model.Page + 1)">Next</a></li>
+            }
+        </ul>
+    </nav>
+}

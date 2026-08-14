@@ -1,0 +1,97 @@
+@model IForm.Application.DTOs.DashboardDto
+@{
+    ViewData["Title"] = "Manager Dashboard";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0"><i class="bi bi-speedometer2 me-2 text-primary"></i>Manager Dashboard</h1>
+    <a asp-controller="Queries" asp-action="Create" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>New Query</a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="stat-card"><div class="stat-value text-primary">@Model.OpenQueries</div><div class="stat-label">Open</div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card"><div class="stat-value text-success">@Model.ResolvedQueries</div><div class="stat-label">Resolved</div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card"><div class="stat-value text-danger">@Model.CriticalQueries</div><div class="stat-label">Critical</div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card"><div class="stat-value">@Model.AverageDelayDays.ToString("0.0")</div><div class="stat-label">Avg Delay (days)</div></div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="table-card">
+            <div class="p-3 bg-white border-bottom"><strong>Top Delayed Projects</strong></div>
+            <table class="table table-hover">
+                <thead><tr><th>Project</th><th>Open</th><th>Max Delay</th></tr></thead>
+                <tbody>
+                    @if (Model.TopDelayedProjects.Count == 0)
+                    {
+                        <tr><td colspan="3" class="text-center text-muted py-4">No delayed projects.</td></tr>
+                    }
+                    @foreach (var p in Model.TopDelayedProjects)
+                    {
+                        <tr>
+                            <td>@p.ProjectName</td>
+                            <td><span class="badge text-bg-secondary">@p.OpenQueries</span></td>
+                            <td><span class="badge @(p.MaxDelayDays >= 30 ? "text-bg-danger" : p.MaxDelayDays >= 15 ? "text-bg-warning" : "text-bg-success")">@p.MaxDelayDays d</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="table-card">
+            <div class="p-3 bg-white border-bottom"><strong>Queries by Issue Type</strong></div>
+            <table class="table table-hover">
+                <tbody>
+                    @foreach (var i in Model.QueriesByIssueType)
+                    {
+                        <tr><td>@i.IssueType</td><td class="text-end fw-bold">@i.Count</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mt-1">
+    <div class="col-lg-6">
+        <div class="table-card">
+            <div class="p-3 bg-white border-bottom"><strong>Engineer Performance</strong></div>
+            <table class="table table-hover">
+                <thead><tr><th>Engineer</th><th>Open</th><th>Resolved</th><th>Avg Delay</th></tr></thead>
+                <tbody>
+                    @foreach (var e in Model.EngineerWise)
+                    {
+                        <tr>
+                            <td>@e.EngineerName</td>
+                            <td><span class="badge text-bg-warning">@e.OpenQueries</span></td>
+                            <td><span class="badge text-bg-success">@e.ResolvedQueries</span></td>
+                            <td>@e.AvgDelay.ToString("0.0") d</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="table-card">
+            <div class="p-3 bg-white border-bottom"><strong>Queries by Month</strong></div>
+            <table class="table table-hover">
+                <thead><tr><th>Month</th><th>Raised</th><th>Resolved</th></tr></thead>
+                <tbody>
+                    @foreach (var m in Model.QueriesByMonth)
+                    {
+                        <tr><td>@m.Month</td><td>@m.Count</td><td>@m.Resolved</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

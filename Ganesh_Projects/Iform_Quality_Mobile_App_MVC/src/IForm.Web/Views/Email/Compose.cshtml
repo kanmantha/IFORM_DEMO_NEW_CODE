@@ -1,0 +1,82 @@
+@model IForm.Domain.Entities.EmailRecord
+@{
+    ViewData["Title"] = "Compose Email";
+    var templates = ViewBag.Templates as IReadOnlyList<IForm.Domain.Entities.EmailTemplate> ?? new List<IForm.Domain.Entities.EmailTemplate>();
+    var queries = ViewBag.Queries as IEnumerable<IForm.Web.Controllers.QuerySelectOption> ?? new List<IForm.Web.Controllers.QuerySelectOption>();
+}
+<div class="d-flex align-items-center mb-3">
+    <a asp-action="History" class="btn btn-outline-secondary btn-sm me-2"><i class="bi bi-arrow-left"></i></a>
+    <h1 class="h4 mb-0"><i class="bi bi-envelope-plus me-2 text-primary"></i>Compose Email</h1>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <label class="form-label">Template</label>
+                <select id="templateSelect" class="form-select">
+                    <option value="">Select template...</option>
+                    @foreach (var t in templates)
+                    {
+                        <option value="@t.Id">@t.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Query</label>
+                <select id="querySelect" class="form-select">
+                    <option value="">Select query...</option>
+                    @foreach (var q in queries)
+                    {
+                        <option value="@q.Id">@q.QueryNumber</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12">
+                <button id="previewBtn" class="btn btn-outline-primary"><i class="bi bi-eye me-1"></i>Preview from Template</button>
+            </div>
+        </div>
+
+        <form asp-action="SaveDraft" method="post">
+            <input type="hidden" name="templateId" id="templateId" value="@(Model.TemplateName == null ? "" : "")" />
+            <input type="hidden" name="queryId" id="queryId" value="" />
+            <div class="mb-3">
+                <label class="form-label">To</label>
+                <input name="to" class="form-control" value="@Model.To" />
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">CC</label>
+                    <input name="cc" class="form-control" value="@Model.Cc" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">BCC</label>
+                    <input name="bcc" class="form-control" value="@Model.Bcc" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Subject</label>
+                <input name="subject" class="form-control" value="@Model.Subject" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Body</label>
+                <textarea name="body" class="form-control" rows="12">@Model.Body</textarea>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>Save Draft</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $('#previewBtn').on('click', function () {
+            var t = $('#templateSelect').val(), q = $('#querySelect').val();
+            if (!t || !q) { alert('Select both template and query.'); return; }
+            $('#templateId').val(t);
+            $('#queryId').val(q);
+            window.location.href = '@Url.Action("Compose", "Email")' + '?templateId=' + t + '&queryId=' + q;
+        });
+    </script>
+}

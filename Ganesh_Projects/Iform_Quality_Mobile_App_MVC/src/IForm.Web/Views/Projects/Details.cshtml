@@ -1,0 +1,96 @@
+@model IForm.Application.DTOs.ProjectDto
+@using IForm.Domain.Enums
+@{
+    ViewData["Title"] = Model.ProjectName;
+    var ipos = ViewBag.Ipos as IReadOnlyList<IForm.Application.DTOs.IpoListItemDto> ?? new List<IForm.Application.DTOs.IpoListItemDto>();
+}
+<div class="d-flex align-items-center mb-3">
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm me-2"><i class="bi bi-arrow-left"></i></a>
+    <h1 class="h4 mb-0">@Model.ProjectName</h1>
+    <span class="badge @(Model.Status == ProjectStatus.Active ? "text-bg-success" : Model.Status == ProjectStatus.OnHold ? "text-bg-warning" : "text-bg-secondary") ms-2">@Model.Status</span>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Project Details</strong></div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr><th class="text-muted">Code</th><td>@Model.ProjectCode</td></tr>
+                        <tr><th class="text-muted">Client</th><td>@Model.Client</td></tr>
+                        <tr><th class="text-muted">Location</th><td>@Model.Location</td></tr>
+                        <tr><th class="text-muted">Start</th><td>@(Model.StartDate?.ToString("dd-MMM-yyyy") ?? "-")</td></tr>
+                        <tr><th class="text-muted">Planned Completion</th><td>@(Model.PlannedCompletion?.ToString("dd-MMM-yyyy") ?? "-")</td></tr>
+                        <tr><th class="text-muted">Manager</th><td>@Model.AssignedManagerName</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white"><strong>IPOs (@ipos.Count)</strong></div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    @if (ipos.Count == 0)
+                    {
+                        <li class="list-group-item text-muted small">No IPOs yet.</li>
+                    }
+                    @foreach (var i in ipos)
+                    {
+                        <li class="list-group-item">
+                            <div class="d-flex justify-content-between">
+                                <span class="fw-bold">@i.IpoNumber</span>
+                                <span class="badge text-bg-secondary">@i.OpenQueries open</span>
+                            </div>
+                            <div class="small text-muted mt-1">
+                                @(i.Quantity?.ToString("0.##") ?? "-") nos / @(i.QuantitySqm?.ToString("0.##") ?? "-") sqm
+                                · @i.DispatchStatus
+                                @if (i.SlabDelayDays.HasValue) { <span class="text-danger">· slab +@i.SlabDelayDays d</span> }
+                            </div>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (User.IsInRole("TenantAdmin"))
+{
+    <div class="card shadow-sm mt-3">
+        <div class="card-header bg-white"><strong>Add IPO</strong></div>
+        <div class="card-body">
+            <form asp-action="CreateIpo" method="post">
+                <input type="hidden" name="ProjectId" value="@Model.Id" />
+                <div class="row g-2">
+                    <div class="col-12 col-md-3">
+                        <input name="IpoNumber" class="form-control" placeholder="IPO-1001" required />
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <input name="Quantity" type="number" step="0.01" class="form-control" placeholder="Qty nos" />
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <input name="QuantitySqm" type="number" step="0.01" class="form-control" placeholder="Qty sqm" />
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <select name="DispatchStatus" class="form-select">
+                            @foreach (var d in Enum.GetValues<DispatchStatus>())
+                            {
+                                <option value="@((int)d)">@d</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3 d-flex gap-2">
+                        <input name="SlabTargetCastingDate" type="date" class="form-control" />
+                        <input name="SlabCompletedDate" type="date" class="form-control" />
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add IPO</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+}

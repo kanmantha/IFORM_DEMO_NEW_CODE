@@ -1,0 +1,31 @@
+@{
+    ViewData["Title"] = "Reports";
+    var isSuperAdmin = User.IsInRole("SuperAdmin");
+    var reports = new (string Name, string Action, string Icon, string Desc)[]
+    {
+        ("Query Report", "QueryReport", "bi-clipboard-data", "All queries with severity, delay and status"),
+        ("Delay Report", "DelayReport", "bi-hourglass-split", "Overdue queries and average delay"),
+        ("Engineer Report", "EngineerReport", "bi-person-gear", "Performance by engineer"),
+        ("Product Issue Report", "ProductIssueReport", "bi-box-seam", "Issues grouped by product"),
+        ("EOT Report", "EotReport", "bi-journal-arrow-up", "EOT claims summary"),
+    };
+    if (isSuperAdmin)
+    {
+        reports = reports.Append(("Usage Report", "UsageReport", "bi-bar-chart-line", "Tenant usage (Super Admin)")).ToArray();
+    }
+}
+<h1 class="h4 mb-3"><i class="bi bi-file-earmark-bar-graph me-2 text-primary"></i>Reports</h1>
+<div class="row g-3">
+    @foreach (var r in reports)
+    {
+        <div class="col-6 col-md-4">
+            <a asp-action="@r.Action" class="text-decoration-none">
+                <div class="card h-100 text-center p-3">
+                    <i class="bi @r.Icon text-primary mb-2" style="font-size:2rem"></i>
+                    <div class="fw-bold">@r.Name</div>
+                    <div class="small text-muted">@r.Desc</div>
+                </div>
+            </a>
+        </div>
+    }
+</div>

@@ -1,0 +1,59 @@
+@model IForm.Application.DTOs.ProductImportResult
+@{
+    ViewData["Title"] = "Import Products";
+    var categories = ViewBag.Categories as IReadOnlyList<IForm.Application.DTOs.ProductCategoryDto> ?? new List<IForm.Application.DTOs.ProductCategoryDto>();
+}
+<div class="d-flex align-items-center mb-3">
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm me-2"><i class="bi bi-arrow-left"></i></a>
+    <h1 class="h4 mb-0"><i class="bi bi-upload me-2 text-primary"></i>Import Product Catalogue</h1>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white"><strong>Upload Excel / CSV</strong></div>
+            <div class="card-body">
+                <form asp-action="Import" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <input type="file" name="file" class="form-control" accept=".xlsx,.xls,.csv" />
+                        <div class="form-text">Columns: Code, Name, Category, Specification, Material, Unit, Description (header row expected).</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-cloud-upload me-1"></i>Import</button>
+                    <a asp-action="DownloadTemplate" class="btn btn-outline-secondary"><i class="bi bi-download me-1"></i>Download Template</a>
+                </form>
+
+                @if (Model != null)
+                {
+                    <hr />
+                    <h6>Import Result</h6>
+                    <div class="row g-2 text-center">
+                        <div class="col-3"><div class="stat-card"><div class="stat-value text-primary">@Model.TotalRecords</div><div class="stat-label">Total</div></div></div>
+                        <div class="col-3"><div class="stat-card"><div class="stat-value text-success">@Model.Imported</div><div class="stat-label">Imported</div></div></div>
+                        <div class="col-3"><div class="stat-card"><div class="stat-value text-warning">@Model.Duplicates</div><div class="stat-label">Duplicates</div></div></div>
+                        <div class="col-3"><div class="stat-card"><div class="stat-value text-danger">@Model.Errors</div><div class="stat-label">Errors</div></div></div>
+                    </div>
+                    @if (Model.Messages.Count > 0)
+                    {
+                        <ul class="mt-3 small">
+                            @foreach (var m in Model.Messages.Take(20))
+                            {
+                                <li>@m</li>
+                            }
+                        </ul>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white"><strong>Quick Seed</strong></div>
+            <div class="card-body">
+                <p class="small text-muted">Load the pre-curated I-FORM accessories catalogue (~140 products) maintained for the lookup module.</p>
+                <form asp-action="SeedDefaultCatalogue" method="post">
+                    <button class="btn btn-outline-primary" type="submit"><i class="bi bi-magic me-1"></i>Load Default Catalogue</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

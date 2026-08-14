@@ -1,0 +1,151 @@
+@model IForm.Application.DTOs.QueryDetailDto
+@using IForm.Domain.Enums
+@using IForm.Contracts
+@{
+    ViewData["Title"] = Model.QueryNumber;
+    bool canResolve = User.IsInRole("Manager") || User.IsInRole("TenantAdmin");
+}
+<div class="d-flex align-items-center mb-3">
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm me-2"><i class="bi bi-arrow-left"></i></a>
+    <h1 class="h4 mb-0">@Model.QueryNumber</h1>
+    <span class="badge sev-severity sev-@Model.Severity.ToString().ToLowerInvariant() ms-2">@Model.Severity</span>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong><i class="bi bi-clipboard-check me-1 text-primary"></i>Query Details</strong>
+                <span class="badge @(Model.Status == QueryStatus.Resolved ? "text-bg-success" : Model.Status == QueryStatus.InProgress ? "text-bg-primary" : "text-bg-secondary")">@Model.Status</span>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr><th class="w-40 text-muted">Project</th><td>@Model.ProjectName</td></tr>
+                        <tr><th class="text-muted">IPO</th><td>@Model.IpoNumber</td></tr>
+                        <tr><th class="text-muted">Issue Type</th><td>@Model.IssueType</td></tr>
+                        <tr><th class="text-muted">Product</th><td>@(string.IsNullOrWhiteSpace(Model.ProductCode) ? "-" : $"{Model.ProductCode} - {Model.ProductName}")</td></tr>
+                        <tr><th class="text-muted">Quantity</th><td>@(Model.QuantityNos?.ToString() ?? "-") nos / @(Model.QuantitySqm?.ToString() ?? "-") sqm</td></tr>
+                        <tr><th class="text-muted">Dispatch</th><td>@Model.DispatchStatus</td></tr>
+                        <tr><th class="text-muted">Raised By</th><td>@Model.RaisedByName</td></tr>
+                        <tr><th class="text-muted">Raised Date</th><td>@Model.RaisedDate.ToString("dd-MMM-yyyy HH:mm")</td></tr>
+                        @if (Model.ResolvedDate.HasValue)
+                        {
+                            <tr><th class="text-muted">Resolved</th><td>@Model.ResolvedDate.Value.ToString("dd-MMM-yyyy HH:mm")</td></tr>
+                        }
+                        <tr>
+                            <th class="text-muted">Delay</th>
+                            <td>
+                                <span class="badge @(Model.DelayDays >= 30 ? "text-bg-danger" : Model.DelayDays >= 15 ? "text-bg-warning" : "text-bg-light border text-dark")">@Model.DelayDays days</span>
+                                @if (Model.SlabDelayDays.HasValue) { <span class="ms-2 small text-muted">Slab delay: @Model.SlabDelayDays days</span> }
+                            </td>
+                        </tr>
+                        @if (!string.IsNullOrWhiteSpace(Model.Comments))
+                        {
+                            <tr><th class="text-muted">Description</th><td>@Model.Comments</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (Model.Photos.Count > 0)
+        {
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white"><strong>Photos</strong></div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        @foreach (var photo in Model.Photos)
+                        {
+                            <div class="col-4 col-md-3">
+                                <a asp-controller="Files" asp-action="Download" asp-route-path="@photo.FilePath" target="_blank">
+                                    <img src="@(photo.Url ?? Url.Action("Download", "Files", new { path = photo.FilePath }))" class="photo-thumb" alt="@photo.FileName" />
+                                </a>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Comments</strong></div>
+            <div class="card-body">
+                <form asp-action="AddComment" method="post" class="mb-3">
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <div class="input-group">
+                        <input type="text" name="body" class="form-control" placeholder="Add a comment..." required />
+                        <button class="btn btn-primary" type="submit"><i class="bi bi-chat-dots"></i></button>
+                    </div>
+                </form>
+
+                @if (!Model.CommentsList.Any())
+                {
+                    <p class="text-muted small mb-0">No comments yet.</p>
+                }
+                @foreach (var c in Model.CommentsList)
+                {
+                    <div class="border rounded p-2 mb-2">
+                        <div class="small"><strong>@c.AuthorName</strong> <span class="text-muted">· @c.CreatedAt.ToString("dd-MMM HH:mm")</span></div>
+                        <div class="mt-1">@c.Body</div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        @if (canResolve)
+        {
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white"><strong>Update Status</strong></div>
+                <div class="card-body">
+                    <form asp-action="ChangeStatus" method="post">
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <div class="mb-2">
+                            <select name="newStatus" class="form-select">
+                                @foreach (var s in Enum.GetValues<QueryStatus>())
+                                {
+                                    <option value="@((int)s)" selected="@(Model.Status == s)">@s</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <textarea name="comment" class="form-control" rows="2" placeholder="Status comment (optional)"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Update Status</button>
+                    </form>
+                </div>
+            </div>
+        }
+
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white"><strong>Status History</strong></div>
+            <div class="card-body">
+                <ul class="timeline">
+                    @foreach (var h in Model.StatusHistory)
+                    {
+                        <li>
+                            <div class="fw-bold">@h.OldStatus → @h.NewStatus</div>
+                            <div class="small text-muted">@h.ChangedByName · @h.ChangedDateTime.ToString("dd-MMM-yyyy HH:mm")</div>
+                            @if (!string.IsNullOrWhiteSpace(h.Comments)) { <div class="small">@h.Comments</div> }
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+
+        @if (Model.AuditEntries.Count > 0)
+        {
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white"><strong>Audit Trail</strong></div>
+                <div class="card-body">
+                    @foreach (var a in Model.AuditEntries.Take(10))
+                    {
+                        <div class="small mb-1"><strong>@a.Action</strong> <span class="text-muted">by @a.UserName @a.Timestamp.ToString("dd-MMM HH:mm")</span></div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>

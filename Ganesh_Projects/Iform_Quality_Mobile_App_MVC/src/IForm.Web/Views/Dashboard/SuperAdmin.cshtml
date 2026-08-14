@@ -1,0 +1,48 @@
+@model IForm.Application.DTOs.SuperAdminDashboardDto
+@{
+    ViewData["Title"] = "Platform Overview";
+}
+<h1 class="h4 mb-3"><i class="bi bi-globe me-2 text-primary"></i>Platform Overview</h1>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-value text-primary">@Model.TotalTenants</div><div class="stat-label">Tenants</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-value text-success">@Model.ActiveTenants</div><div class="stat-label">Active</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-value text-warning">@Model.TrialTenants</div><div class="stat-label">Trial</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-value text-danger">@Model.ExpiredTenants</div><div class="stat-label">Expired</div></div></div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="table-card">
+            <div class="p-3 bg-white border-bottom"><strong>Platform Totals</strong></div>
+            <table class="table">
+                <tbody>
+                    <tr><td>Users</td><td class="text-end fw-bold">@Model.TotalUsers</td></tr>
+                    <tr><td>Projects</td><td class="text-end fw-bold">@Model.TotalProjects</td></tr>
+                    <tr><td>Total Queries</td><td class="text-end fw-bold">@Model.TotalQueries</td></tr>
+                    <tr><td>Open Queries</td><td class="text-end fw-bold">@Model.OpenQueries</td></tr>
+                    <tr><td>Critical Queries</td><td class="text-end fw-bold text-danger">@Model.CriticalQueries</td></tr>
+                    <tr><td>Storage Used</td><td class="text-end fw-bold">@(Model.TotalStorageBytes / 1024 / 1024) MB</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="table-card">
+            <div class="p-3 bg-white border-bottom"><strong>Subscription Distribution</strong></div>
+            <table class="table">
+                <tbody>
+                    @foreach (var d in Model.SubscriptionDistribution)
+                    {
+                        <tr><td>@d.PlanName</td><td class="text-end fw-bold">@d.Count</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="mt-3">
+    <a asp-controller="SuperAdmin" asp-action="Tenants" class="btn btn-primary"><i class="bi bi-people me-1"></i>Manage Tenants</a>
+    <a asp-controller="SuperAdmin" asp-action="Plans" class="btn btn-outline-primary"><i class="bi bi-credit-card me-1"></i>Subscription Plans</a>
+</div>

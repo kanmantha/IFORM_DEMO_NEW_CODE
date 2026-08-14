@@ -1,0 +1,69 @@
+@model IForm.Application.DTOs.CreateProjectRequest
+@using IForm.Domain.Enums
+@{
+    ViewData["Title"] = "Create Project";
+    var managers = ViewBag.Managers as IReadOnlyList<IForm.Application.DTOs.UserDto> ?? new List<IForm.Application.DTOs.UserDto>();
+}
+<div class="d-flex align-items-center mb-3">
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm me-2"><i class="bi bi-arrow-left"></i></a>
+    <h1 class="h4 mb-0">Create Project</h1>
+</div>
+
+<form asp-action="Create" method="post">
+    <div asp-validation-summary="ModelOnly" class="text-danger small mb-3"></div>
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label asp-for="ProjectCode" class="form-label">Code <span class="text-danger">*</span></label>
+                    <input asp-for="ProjectCode" class="form-control" placeholder="e.g. PRJ-2026-001" />
+                    <span asp-validation-for="ProjectCode" class="text-danger small"></span>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label asp-for="ProjectName" class="form-label">Name <span class="text-danger">*</span></label>
+                    <input asp-for="ProjectName" class="form-control" />
+                    <span asp-validation-for="ProjectName" class="text-danger small"></span>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label asp-for="Client" class="form-label">Client</label>
+                    <input asp-for="Client" class="form-control" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label asp-for="Location" class="form-label">Location</label>
+                    <input asp-for="Location" class="form-control" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label asp-for="StartDate" class="form-label">Start Date</label>
+                    <input asp-for="StartDate" type="date" class="form-control" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label asp-for="PlannedCompletion" class="form-label">Planned Completion</label>
+                    <input asp-for="PlannedCompletion" type="date" class="form-control" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label asp-for="Status" class="form-label">Status</label>
+                    <select asp-for="Status" class="form-select">
+                        @foreach (var s in Enum.GetValues<ProjectStatus>())
+                        {
+                            <option value="@((int)s)">@s</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label asp-for="AssignedManagerId" class="form-label">Assigned Manager</label>
+                    <select asp-for="AssignedManagerId" class="form-select" asp-items="@(new SelectList(managers, "Id", "FullName"))">
+                        <option value="">None</option>
+                    </select>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Project</button>
+        </div>
+    </div>
+</form>
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

@@ -1,0 +1,83 @@
+@model IForm.Application.Common.PagedResult<IForm.Application.DTOs.ProductListItemDto>
+@{
+    ViewData["Title"] = "Product Catalogue";
+    var categories = ViewBag.Categories as IReadOnlyList<IForm.Application.DTOs.ProductCategoryDto> ?? new List<IForm.Application.DTOs.ProductCategoryDto>();
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0"><i class="bi bi-box-seam me-2 text-primary"></i>Product Catalogue</h1>
+    <div class="d-flex gap-2">
+        @if (User.IsInRole("TenantAdmin") || User.IsInRole("SuperAdmin"))
+        {
+            <a asp-action="Import" class="btn btn-outline-primary"><i class="bi bi-upload me-1"></i>Import</a>
+            <a asp-action="Create" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add</a>
+        }
+    </div>
+</div>
+
+<form method="get" asp-action="Index" class="search-box">
+    <div class="row g-2">
+        <div class="col-8 col-md-6">
+            <input type="text" name="term" class="form-control" placeholder="Search code or name..." value="@Context.Request.Query["term"]" />
+        </div>
+        <div class="col-4 col-md-4">
+            <select name="categoryId" class="form-select">
+                <option value="">All Categories</option>
+                @foreach (var c in categories)
+                {
+                    <option value="@c.Id">@c.Name</option>
+                }
+            </select>
+        </div>
+        <div class="col-12 col-md-2">
+            <button class="btn btn-primary w-100" type="submit"><i class="bi bi-search"></i></button>
+        </div>
+    </div>
+</form>
+
+@if (!Model.Items.Any())
+{
+    <div class="text-center text-muted py-5">
+        <i class="bi bi-box" style="font-size:3rem"></i>
+        <p class="mt-2 mb-0">No products found.</p>
+        @if (User.IsInRole("TenantAdmin"))
+        {
+            <form asp-action="SeedDefaultCatalogue" method="post" class="mt-3">
+                <button class="btn btn-outline-primary" type="submit"><i class="bi bi-magic me-1"></i>Load I-FORM Default Catalogue</button>
+            </form>
+        }
+    </div>
+}
+else
+{
+    <div class="row g-2">
+        @foreach (var p in Model.Items)
+        {
+            <div class="col-6 col-md-4 col-lg-3">
+                <a asp-action="Details" asp-route-id="@p.Id" class="text-decoration-none">
+                    <div class="card h-100">
+                        <div class="card-body p-2">
+                            <div class="fw-bold text-primary small">@p.ProductCode</div>
+                            <div class="small text-dark">@p.ProductName</div>
+                            <div class="small text-muted">@p.CategoryName</div>
+                            @if (p.Specification != null) { <div class="small text-muted">@p.Specification</div> }
+                        </div>
+                    </div>
+                </a>
+            </div>
+        }
+    </div>
+
+    <nav aria-label="Pagination" class="mt-3">
+        <ul class="pagination justify-content-center">
+            @if (Model.HasPrevious)
+            {
+                <li class="page-item"><a class="page-link" asp-action="Index" asp-route-page="@(Model.Page - 1)">Previous</a></li>
+            }
+            <li class="page-item disabled"><span class="page-link">@Model.Page / @Model.TotalPages</span></li>
+            @if (Model.HasNext)
+            {
+                <li class="page-item"><a class="page-link" asp-action="Index" asp-route-page="@(Model.Page + 1)">Next</a></li>
+            }
+        </ul>
+    </nav>
+}

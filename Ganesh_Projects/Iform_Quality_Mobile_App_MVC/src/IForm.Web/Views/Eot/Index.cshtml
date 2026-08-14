@@ -1,0 +1,78 @@
+@model IReadOnlyList<IForm.Application.DTOs.EotListItemDto>
+@using IForm.Domain.Enums
+@{
+    ViewData["Title"] = "EOT Claims";
+    var projects = ViewBag.Projects as IReadOnlyList<IForm.Application.DTOs.ProjectListItemDto> ?? new List<IForm.Application.DTOs.ProjectListItemDto>();
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0"><i class="bi bi-journal-arrow-up me-2 text-primary"></i>EOT Claims</h1>
+    @if (User.IsInRole("TenantAdmin"))
+    {
+        <a asp-action="Create" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>New EOT</a>
+    }
+</div>
+
+<form method="get" asp-action="Index" class="search-box">
+    <div class="row g-2">
+        <div class="col-6">
+            <select name="projectId" class="form-select">
+                <option value="">All Projects</option>
+                @foreach (var p in projects)
+                {
+                    <option value="@p.Id">@p.ProjectName</option>
+                }
+            </select>
+        </div>
+        <div class="col-6">
+            <select name="status" class="form-select">
+                <option value="">All Status</option>
+                @foreach (var s in Enum.GetValues<EotStatus>())
+                {
+                    <option value="@((int)s)">@s</option>
+                }
+            </select>
+        </div>
+        <div class="col-12">
+            <button class="btn btn-primary w-100" type="submit"><i class="bi bi-search me-1"></i>Filter</button>
+        </div>
+    </div>
+</form>
+
+@if (!Model.Any())
+{
+    <div class="text-center text-muted py-5">
+        <i class="bi bi-journal-arrow-up" style="font-size:3rem"></i>
+        <p class="mt-2 mb-0">No EOT claims found.</p>
+    </div>
+}
+else
+{
+    @foreach (var e in Model)
+    {
+        <a asp-action="Details" asp-route-id="@e.Id" class="text-decoration-none">
+            <div class="list-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="lead-title">@e.EotNumber</div>
+                        <div class="small text-muted">@e.ProjectName</div>
+                    </div>
+                    <span class="badge @(e.Status == EotStatus.Approved ? "text-bg-success" : e.Status is EotStatus.Rejected or EotStatus.Cancelled ? "text-bg-danger" : e.Status == EotStatus.Draft ? "text-bg-secondary" : "text-bg-primary")">@e.Status</span>
+                </div>
+                <div class="small mt-1">
+                    <span class="badge text-bg-light border">@e.Scenario</span>
+                    <span class="badge text-bg-light border">@e.Category</span>
+                    @if (e.DelayDays.HasValue) { <span class="badge text-bg-warning">@e.DelayDays.Value.ToString("0.##") d delay</span> }
+                    @if (e.CostEscalation.HasValue) { <span class="badge text-bg-danger">@e.CostEscalation.Value.ToString("0.##") cost</span> }
+                    @if (e.ClientApproval != ClientApprovalStatus.NotStarted)
+                    {
+                        <span class="badge @(e.ClientApproval == ClientApprovalStatus.Approved ? "text-bg-success" : "text-bg-secondary")">Client: @e.ClientApproval</span>
+                    }
+                </div>
+                <div class="small text-muted mt-1 d-flex justify-content-between">
+                    <span>Rev @e.RevisionNumber · FY @e.FinancialYear</span>
+                    <span>@e.CreatedAt.ToString("dd-MMM-yyyy")</span>
+                </div>
+            </div>
+        </a>
+    }
+}

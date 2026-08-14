@@ -1,0 +1,111 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0d6efd" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="~/manifest.json" />
+    <title>@ViewData["Title"] - I-FORM Site Query</title>
+    <link rel="icon" href="~/favicon.ico" />
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <header class="app-header">
+        <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+            <div class="container-fluid">
+                <a class="navbar-brand fw-bold d-flex align-items-center gap-2" asp-controller="Dashboard" asp-action="Index">
+                    <i class="bi bi-buildings"></i>
+                    <span>I-FORM <small class="d-none d-sm-inline text-white-50">Site Query</small></span>
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="mainNav">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                        @if (User.Identity!.IsAuthenticated)
+                        {
+                            <li class="nav-item"><a class="nav-link" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-speedometer2 me-1"></i>Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link" asp-controller="Queries" asp-action="Index"><i class="bi bi-clipboard-check me-1"></i>Site Queries</a></li>
+                            <li class="nav-item"><a class="nav-link" asp-controller="Queries" asp-action="Create"><i class="bi bi-plus-circle me-1"></i>New Query</a></li>
+                            <li class="nav-item"><a class="nav-link" asp-controller="Products" asp-action="Index"><i class="bi bi-box-seam me-1"></i>Products</a></li>
+                            <li class="nav-item"><a class="nav-link" asp-controller="Projects" asp-action="Index"><i class="bi bi-kanban me-1"></i>Projects</a></li>
+                            @if (User.IsInRole("Manager") || User.IsInRole("TenantAdmin") || User.IsInRole("SuperAdmin"))
+                            {
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"><i class="bi bi-file-earmark-bar-graph me-1"></i>Reports</a>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" asp-controller="Reports" asp-action="Index">Reports Home</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Reports" asp-action="QueryReport">Query Report</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Reports" asp-action="DelayReport">Delay Report</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Reports" asp-action="EngineerReport">Engineer Report</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Reports" asp-action="ProductIssueReport">Product Issue Report</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Reports" asp-action="EotReport">EOT Report</a></li>
+                                    </ul>
+                                </li>
+                                <li class="nav-item"><a class="nav-link" asp-controller="Eot" asp-action="Index"><i class="bi bi-hourglass-split me-1"></i>EOT</a></li>
+                                <li class="nav-item"><a class="nav-link" asp-controller="Email" asp-action="Compose"><i class="bi bi-envelope me-1"></i>Auto Email</a></li>
+                            }
+                            @if (User.IsInRole("TenantAdmin") || User.IsInRole("SuperAdmin"))
+                            {
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"><i class="bi bi-gear me-1"></i>Admin</a>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" asp-controller="Users" asp-action="Index">Users</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Subscription" asp-action="Index">Subscription</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Email" asp-action="Templates">Email Templates</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Products" asp-action="Import">Import Products</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Reports" asp-action="UsageReport">Usage Report</a></li>
+                                    </ul>
+                                </li>
+                            }
+                            @if (User.IsInRole("SuperAdmin"))
+                            {
+                                <li class="nav-item"><a class="nav-link" asp-controller="SuperAdmin" asp-action="Tenants"><i class="bi bi-people me-1"></i>Tenants</a></li>
+                            }
+                        }
+                    </ul>
+                    <partial name="_LoginPartial" />
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container py-3 pb-5 mb-5">
+        @if (TempData["Success"] != null)
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                @TempData["Success"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+        @if (TempData["Error"] != null)
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                @TempData["Error"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+        @RenderBody()
+    </main>
+
+    @if (User.Identity!.IsAuthenticated)
+    {
+        <nav class="bottom-nav d-lg-none">
+            <a class="bottom-nav-item" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-speedometer2"></i><span>Home</span></a>
+            <a class="bottom-nav-item" asp-controller="Queries" asp-action="Index"><i class="bi bi-clipboard-check"></i><span>Queries</span></a>
+            <a class="bottom-nav-item active" asp-controller="Queries" asp-action="Create"><i class="bi bi-plus-circle-fill"></i><span>New</span></a>
+            <a class="bottom-nav-item" asp-controller="Products" asp-action="Index"><i class="bi bi-box-seam"></i><span>Products</span></a>
+            <a class="bottom-nav-item" asp-controller="Account" asp-action="Profile"><i class="bi bi-person"></i><span>Profile</span></a>
+        </nav>
+    }
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

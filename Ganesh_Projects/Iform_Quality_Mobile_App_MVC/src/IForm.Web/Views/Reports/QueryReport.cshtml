@@ -1,0 +1,16 @@
+@{
+    ViewData["Title"] = "Query Report";
+    ViewData["ReportTitle"] = "Query Report";
+    ViewData["ReportKey"] = "queries";
+}
+<div class="search-box mb-3">
+    <form method="get" asp-action="QueryReport" class="row g-2">
+        <div class="col-8">
+            <input type="text" name="term" class="form-control" placeholder="Search IPO, code, project..." value="@Context.Request.Query["term"]" />
+        </div>
+        <div class="col-4">
+            <button class="btn btn-primary w-100" type="submit"><i class="bi bi-search"></i></button>
+        </div>
+    </form>
+</div>
+@await Html.PartialAsync("_ReportTable", (IReadOnlyList<IForm.Application.Services.ReportRow>)Model)

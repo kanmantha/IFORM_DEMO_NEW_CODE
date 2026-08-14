@@ -1,0 +1,56 @@
+@model IReadOnlyList<IForm.Application.DTOs.IpoListItemDto>
+@using IForm.Domain.Enums
+@{
+    ViewData["Title"] = "IPOs";
+    var projects = ViewBag.Projects as IReadOnlyList<IForm.Application.DTOs.ProjectListItemDto> ?? new List<IForm.Application.DTOs.ProjectListItemDto>();
+}
+<h1 class="h4 mb-3"><i class="bi bi-receipt me-2 text-primary"></i>IPOs</h1>
+
+<form method="get" asp-action="Ipos" class="search-box">
+    <div class="row g-2">
+        <div class="col-6 col-md-4">
+            <select name="projectId" class="form-select">
+                <option value="">All Projects</option>
+                @foreach (var p in projects)
+                {
+                    <option value="@p.Id">@p.ProjectName</option>
+                }
+            </select>
+        </div>
+        <div class="col-6 col-md-6">
+            <input type="text" name="term" class="form-control" placeholder="Search IPO number..." value="@Context.Request.Query["term"]" />
+        </div>
+        <div class="col-12 col-md-2">
+            <button class="btn btn-primary w-100" type="submit"><i class="bi bi-search"></i></button>
+        </div>
+    </div>
+</form>
+
+@if (!Model.Any())
+{
+    <div class="text-center text-muted py-5">
+        <i class="bi bi-receipt" style="font-size:3rem"></i>
+        <p class="mt-2 mb-0">No IPOs found.</p>
+    </div>
+}
+else
+{
+    <div class="table-card">
+        <table class="table table-hover">
+            <thead><tr><th>IPO</th><th>Project</th><th>Qty</th><th>Dispatch</th><th>Slab Delay</th><th>Open</th></tr></thead>
+            <tbody>
+                @foreach (var i in Model)
+                {
+                    <tr>
+                        <td class="fw-bold">@i.IpoNumber</td>
+                        <td>@i.ProjectName</td>
+                        <td>@(i.Quantity?.ToString("0.##") ?? "-") nos / @(i.QuantitySqm?.ToString("0.##") ?? "-") sqm</td>
+                        <td><span class="badge text-bg-light border">@i.DispatchStatus</span></td>
+                        <td>@if (i.SlabDelayDays.HasValue) { <span class="badge @(i.SlabDelayDays >= 30 ? "text-bg-danger" : "text-bg-warning")">@i.SlabDelayDays d</span> } else { <span class="text-muted">-</span> }</td>
+                        <td><span class="badge text-bg-secondary">@i.OpenQueries</span></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

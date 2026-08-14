@@ -1,0 +1,6 @@
+# Re-include the ASP.NET Core Web project. The shared root .gitignore's "*.web"
+# rule matches any path component ending in ".web", which would otherwise exclude
+# the whole "src/IForm.Web" directory (Program.cs, Controllers, Views, appsettings,
+# csproj, wwwroot) from version control.
+!src/
+!src/IForm.Web/

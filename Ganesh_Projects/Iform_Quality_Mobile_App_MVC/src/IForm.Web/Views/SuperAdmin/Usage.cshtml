@@ -1,0 +1,43 @@
+@model IForm.Application.DTOs.SuperAdminDashboardDto
+@{
+    ViewData["Title"] = "Usage";
+}
+<h1 class="h4 mb-3"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Platform Usage</h1>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-value text-primary">@Model.TotalTenants</div><div class="stat-label">Tenants</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-value text-success">@Model.TotalUsers</div><div class="stat-label">Users</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-value text-warning">@Model.TotalQueries</div><div class="stat-label">Queries</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-value text-danger">@Model.CriticalQueries</div><div class="stat-label">Critical</div></div></div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="table-card">
+            <div class="p-3 bg-white border-bottom"><strong>Subscription Distribution</strong></div>
+            <table class="table">
+                <tbody>
+                    @foreach (var d in Model.SubscriptionDistribution)
+                    {
+                        <tr><td>@d.PlanName</td><td class="text-end fw-bold">@d.Count</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="table-card">
+            <div class="p-3 bg-white border-bottom"><strong>Summary</strong></div>
+            <table class="table">
+                <tbody>
+                    <tr><td>Active Tenants</td><td class="text-end fw-bold">@Model.ActiveTenants</td></tr>
+                    <tr><td>Trial Tenants</td><td class="text-end fw-bold">@Model.TrialTenants</td></tr>
+                    <tr><td>Expired Tenants</td><td class="text-end fw-bold text-danger">@Model.ExpiredTenants</td></tr>
+                    <tr><td>Total Projects</td><td class="text-end fw-bold">@Model.TotalProjects</td></tr>
+                    <tr><td>Open Queries</td><td class="text-end fw-bold">@Model.OpenQueries</td></tr>
+                    <tr><td>Storage Used</td><td class="text-end fw-bold">@(Model.TotalStorageBytes / 1024 / 1024) MB</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

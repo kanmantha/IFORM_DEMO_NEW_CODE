@@ -1,0 +1,47 @@
+@model IReadOnlyList<IForm.Application.DTOs.UserDto>
+@{
+    ViewData["Title"] = "Users";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0"><i class="bi bi-people me-2 text-primary"></i>Users</h1>
+    <a asp-action="Create" class="btn btn-primary"><i class="bi bi-person-plus me-1"></i>Add</a>
+</div>
+
+<div class="table-card table-responsive">
+    <table class="table table-hover">
+        <thead><tr><th>User</th><th>Role</th><th>Contact</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+            @if (!Model.Any())
+            {
+                <tr><td colspan="5" class="text-center text-muted py-4">No users.</td></tr>
+            }
+            @foreach (var u in Model)
+            {
+                <tr>
+                    <td>
+                        <div class="fw-bold">@u.FullName</div>
+                        <div class="small text-muted">@@@u.UserName</div>
+                    </td>
+                    <td>
+                        @foreach (var r in u.Roles)
+                        {
+                            <span class="badge text-bg-light border me-1">@AppRoles.DisplayName(r)</span>
+                        }
+                    </td>
+                    <td class="small">@u.Email<br />@u.MobileNumber</td>
+                    <td>
+                        <span class="badge @(u.IsActive ? "text-bg-success" : "text-bg-secondary")">@(u.IsActive ? "Active" : "Inactive")</span>
+                    </td>
+                    <td class="text-end">
+                        <form asp-action="ToggleActive" method="post">
+                            <input type="hidden" name="id" value="@u.Id" />
+                            <button class="btn btn-sm @(u.IsActive ? "btn-outline-danger" : "btn-outline-success")" type="submit">
+                                @(u.IsActive ? "Deactivate" : "Activate")
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,29 @@
+@model IReadOnlyList<IForm.Domain.Entities.EmailTemplate>
+@{
+    ViewData["Title"] = "Email Templates";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0"><i class="bi bi-envelope-paper me-2 text-primary"></i>Email Templates</h1>
+    <a asp-action="EditTemplate" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>New</a>
+</div>
+
+<div class="table-card">
+    <table class="table table-hover">
+        <thead><tr><th>Name</th><th>Issue Type</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+            @if (!Model.Any())
+            {
+                <tr><td colspan="4" class="text-center text-muted py-4">No templates yet.</td></tr>
+            }
+            @foreach (var t in Model)
+            {
+                <tr>
+                    <td class="fw-bold">@t.Name @(t.IsDefault ? "<span class='badge text-bg-light border ms-1'>Default</span>" : "")</td>
+                    <td>@t.IssueType</td>
+                    <td><span class="badge @(t.IsActive ? "text-bg-success" : "text-bg-secondary")">@(t.IsActive ? "Active" : "Inactive")</span></td>
+                    <td class="text-end"><a asp-action="EditTemplate" asp-route-id="@t.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

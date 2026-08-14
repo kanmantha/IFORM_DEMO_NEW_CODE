@@ -1,0 +1,6 @@
+@{
+    ViewData["Title"] = "EOT Report";
+    ViewData["ReportTitle"] = "EOT Report";
+    ViewData["ReportKey"] = "eots";
+}
+@await Html.PartialAsync("_ReportTable", (IReadOnlyList<IForm.Application.Services.ReportRow>)Model)
