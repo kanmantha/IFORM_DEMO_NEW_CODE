@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/IForm.Application/IForm.Application.csproj" />
+    <Project Path="src/IForm.Contracts/IForm.Contracts.csproj" />
+    <Project Path="src/IForm.Domain/IForm.Domain.csproj" />
+    <Project Path="src/IForm.Infrastructure/IForm.Infrastructure.csproj" />
+    <Project Path="src/IForm.Persistence/IForm.Persistence.csproj" />
+    <Project Path="src/IForm.Web/IForm.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/IForm.IntegrationTests/IForm.IntegrationTests.csproj" />
+    <Project Path="tests/IForm.SecurityTests/IForm.SecurityTests.csproj" />
+    <Project Path="tests/IForm.UnitTests/IForm.UnitTests.csproj" />
+  </Folder>
+</Solution>

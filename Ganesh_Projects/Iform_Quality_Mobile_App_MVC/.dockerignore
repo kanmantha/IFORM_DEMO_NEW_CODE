@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/TestResults/
+**/logs/
+src/IForm.Web/storage/
+tests/
+.git/
+.github/
+.dockerignore
+*.user
+*.suo

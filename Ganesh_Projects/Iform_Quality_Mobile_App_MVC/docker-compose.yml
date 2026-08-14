@@ -1,0 +1,46 @@
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Developer"
+      MSSQL_SA_PASSWORD: "${SQL_PASSWORD:-IformAdmin@12345}"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  web:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Server=db;Database=IFORM_SiteQuery;User Id=sa;Password=${SQL_PASSWORD:-IformAdmin@12345};TrustServerCertificate=true;MultipleActiveResultSets=true"
+      ApplicationBaseUrl: "http://localhost:8080"
+      Storage__Provider: "Local"
+      Storage__Local__RootPath: "/app/storage"
+      Storage__Azure__ConnectionString: ""
+      Email__Provider: "Log"
+      Email__From: "no-reply@iform.example.com"
+      Payment__Provider: "Mock"
+      Seed__SuperAdminEmail: "${SUPERADMIN_EMAIL:-superadmin@iform.example.com}"
+      Seed__SuperAdminPassword: "${SUPERADMIN_PASSWORD:-Admin@12345}"
+    ports:
+      - "8080:8080"
+    volumes:
+      - app-storage:/app/storage
+    restart: unless-stopped
+
+volumes:
+  sql-data:
+  app-storage:
