@@ -6,6 +6,27 @@
     var ipos = ViewBag.Ipos as IReadOnlyList<IForm.Application.DTOs.IpoListItemDto> ?? new List<IForm.Application.DTOs.IpoListItemDto>();
     var products = ViewBag.Products as IReadOnlyList<IForm.Application.DTOs.ProductListItemDto> ?? new List<IForm.Application.DTOs.ProductListItemDto>();
 }
+<style>
+    .sq-photo-img {
+        width: 56px;
+        height: 56px;
+        object-fit: contain;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        background: #fff;
+        cursor: zoom-in;
+        transition: width .18s ease, height .18s ease, box-shadow .18s ease;
+    }
+    .sq-photo:hover .sq-photo-img {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 200px;
+        height: 200px;
+        z-index: 30;
+        box-shadow: 0 0 0 4px rgba(255, 255, 255, .7), 0 .5rem 1.25rem rgba(0, 0, 0, .25);
+    }
+</style>
 <div class="d-flex align-items-center mb-3">
     <a asp-action="Index" class="btn btn-outline-secondary btn-sm me-2"><i class="bi bi-arrow-left"></i></a>
     <h1 class="h4 mb-0"><i class="bi bi-plus-circle me-2 text-primary"></i>Report Site Query</h1>
@@ -48,8 +69,11 @@
                     <label class="form-label">Product Code</label>
                     <input asp-for="ProductCode" class="form-control" list="product-list" placeholder="Search product code" />
                     <datalist id="product-list">
-                        @foreach (var p in products) { <option value="@p.ProductCode">@p.ProductName</option> }
+                        @foreach (var p in products) { <option value="@p.ProductCode" data-photo="@p.PhotoPath">@p.ProductName</option> }
                     </datalist>
+                    <div id="product-photo-preview" class="sq-photo position-relative mt-2 d-none">
+                        <img id="product-photo-img" src="" alt="Product" class="sq-photo-img" />
+                    </div>
                 </div>
                 <div class="col-md-6 mb-3">
                     <label asp-for="ProductName" class="form-label">Product Name</label>
@@ -110,15 +134,21 @@
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
     <script>
-        $('#ProductCode').on('input', function () {
-            var code = $(this).val();
+        var productPhotoUrl = '@Url.Action("Download", "Files")';
+        function updateProductPhoto() {
+            var code = $('#ProductCode').val();
+            var photo = null;
             $('#product-list option').each(function () {
-                if ($(this).val() === code) {
-                    var opts = $('#product-list').find('option');
-                    var match = opts.filter(function () { return $(this).val() === code; });
-                    if (match.length) { /* autofill via datalist selection */ }
-                }
+                if ($(this).val() === code) { photo = $(this).data('photo'); }
             });
-        });
+            if (photo) {
+                $('#product-photo-img').attr('src', productPhotoUrl + '?path=' + encodeURIComponent(photo)).attr('alt', code);
+                $('#product-photo-preview').removeClass('d-none');
+            } else {
+                $('#product-photo-preview').addClass('d-none');
+            }
+        }
+        $('#ProductCode').on('input change', updateProductPhoto);
+        updateProductPhoto();
     </script>
 }
