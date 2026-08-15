@@ -64,7 +64,6 @@ public class QueryComment : TenantEntity
     public string Body { get; set; } = string.Empty;
     public Guid AuthorId { get; set; }
     public ApplicationUser? Author { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 public class QueryStatusHistory : TenantEntity

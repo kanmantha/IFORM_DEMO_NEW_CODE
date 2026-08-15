@@ -20,30 +20,37 @@ public class MaintenanceBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Give the app a moment to finish seeding on first boot.
-        await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
-            {
-                using var scope = _scopeFactory.CreateScope();
-                var escalation = scope.ServiceProvider.GetRequiredService<IEscalationService>();
-                var escalated = await escalation.ProcessEscalationsAsync(stoppingToken);
-                if (escalated > 0)
-                    _logger.LogInformation("Escalated {Count} overdue queries.", escalated);
+            // Give the app a moment to finish seeding on first boot.
+            await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
 
-                var retention = scope.ServiceProvider.GetRequiredService<IPhotoRetentionService>();
-                var purged = await retention.PurgeExpiredAsync(stoppingToken);
-                if (purged > 0)
-                    _logger.LogInformation("Photo retention purge removed {Count} photos.", purged);
-            }
-            catch (Exception ex)
+            while (!stoppingToken.IsCancellationRequested)
             {
-                _logger.LogError(ex, "Maintenance background job failed.");
-            }
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var escalation = scope.ServiceProvider.GetRequiredService<IEscalationService>();
+                    var escalated = await escalation.ProcessEscalationsAsync(stoppingToken);
+                    if (escalated > 0)
+                        _logger.LogInformation("Escalated {Count} overdue queries.", escalated);
 
-            await Task.Delay(_interval, stoppingToken);
+                    var retention = scope.ServiceProvider.GetRequiredService<IPhotoRetentionService>();
+                    var purged = await retention.PurgeExpiredAsync(stoppingToken);
+                    if (purged > 0)
+                        _logger.LogInformation("Photo retention purge removed {Count} photos.", purged);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Maintenance background job failed.");
+                }
+
+                await Task.Delay(_interval, stoppingToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Maintenance service stopping.");
         }
     }
 }

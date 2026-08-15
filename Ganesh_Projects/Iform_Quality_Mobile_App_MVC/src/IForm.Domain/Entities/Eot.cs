@@ -30,7 +30,6 @@ public class EotRecord : TenantEntity
     public decimal? EstimatedTimeImpactDays { get; set; }
     public string? EstimatedCostImpact { get; set; }
     public string? Remarks { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public Guid CreatedByUserId { get; set; }
 
     public ICollection<ScopeVariation> ScopeVariations { get; set; } = new List<ScopeVariation>();

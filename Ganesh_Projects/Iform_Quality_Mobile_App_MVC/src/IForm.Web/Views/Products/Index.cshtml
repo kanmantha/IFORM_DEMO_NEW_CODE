@@ -3,6 +3,27 @@
     ViewData["Title"] = "Product Catalogue";
     var categories = ViewBag.Categories as IReadOnlyList<IForm.Application.DTOs.ProductCategoryDto> ?? new List<IForm.Application.DTOs.ProductCategoryDto>();
 }
+<style>
+    .product-photo-img {
+        width: 56px;
+        height: 56px;
+        object-fit: contain;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        background: #fff;
+        cursor: zoom-in;
+        transition: width .18s ease, height .18s ease, box-shadow .18s ease;
+    }
+    .product-photo:hover .product-photo-img {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 200px;
+        height: 200px;
+        z-index: 30;
+        box-shadow: 0 0 0 4px rgba(255, 255, 255, .7), 0 .5rem 1.25rem rgba(0, 0, 0, .25);
+    }
+</style>
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h4 mb-0"><i class="bi bi-box-seam me-2 text-primary"></i>Product Catalogue</h1>
     <div class="d-flex gap-2">
@@ -55,11 +76,19 @@ else
             <div class="col-6 col-md-4 col-lg-3">
                 <a asp-action="Details" asp-route-id="@p.Id" class="text-decoration-none">
                     <div class="card h-100">
-                        <div class="card-body p-2">
-                            <div class="fw-bold text-primary small">@p.ProductCode</div>
-                            <div class="small text-dark">@p.ProductName</div>
-                            <div class="small text-muted">@p.CategoryName</div>
-                            @if (p.Specification != null) { <div class="small text-muted">@p.Specification</div> }
+                        <div class="card-body p-2 d-flex gap-2 align-items-start">
+                            @if (!string.IsNullOrEmpty(p.PhotoPath))
+                            {
+                                <div class="product-photo position-relative flex-shrink-0">
+                                    <img src="@Url.Action("Download", "Files", new { path = p.PhotoPath })" alt="@p.ProductCode" class="product-photo-img" loading="lazy" />
+                                </div>
+                            }
+                            <div class="min-w-0">
+                                <div class="fw-bold text-primary small">@p.ProductCode</div>
+                                <div class="small text-dark">@p.ProductName</div>
+                                <div class="small text-muted">@p.CategoryName</div>
+                                @if (p.Specification != null) { <div class="small text-muted">@p.Specification</div> }
+                            </div>
                         </div>
                     </div>
                 </a>

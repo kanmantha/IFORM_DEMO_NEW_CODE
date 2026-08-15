@@ -16,11 +16,6 @@ public class Tenant : BaseEntity
     public string? LogoPath { get; set; }
     public string? PrimaryColor { get; set; } = "#0d6efd";
     public TenantStatus Status { get; set; } = TenantStatus.Trial;
-    public bool IsDeleted { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public string? CreatedBy { get; set; }
-    public DateTime? UpdatedAt { get; set; }
-    public string? UpdatedBy { get; set; }
 
     public ICollection<TenantSetting> Settings { get; set; } = new List<TenantSetting>();
     public ICollection<ApplicationUser> Users { get; set; } = new List<ApplicationUser>();

@@ -34,7 +34,6 @@ public class EmailRecord : TenantEntity
     public bool Sent { get; set; }
     public DateTime? SentAt { get; set; }
     public string? Error { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public Guid CreatedByUserId { get; set; }
     public ApplicationUser? CreatedByUser { get; set; }
 }

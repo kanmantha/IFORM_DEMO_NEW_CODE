@@ -20,24 +20,31 @@ public class SubscriptionExpiryBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Give the app a moment to finish seeding on first boot.
-        await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
-            {
-                using var scope = _scopeFactory.CreateScope();
-                var subscriptionService = scope.ServiceProvider.GetRequiredService<ISubscriptionService>();
-                await subscriptionService.ProcessExpirationsAsync(stoppingToken);
-                await subscriptionService.RefreshAllUsageAsync(stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Subscription background job failed.");
-            }
+            // Give the app a moment to finish seeding on first boot.
+            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
 
-            await Task.Delay(_interval, stoppingToken);
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var subscriptionService = scope.ServiceProvider.GetRequiredService<ISubscriptionService>();
+                    await subscriptionService.ProcessExpirationsAsync(stoppingToken);
+                    await subscriptionService.RefreshAllUsageAsync(stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Subscription background job failed.");
+                }
+
+                await Task.Delay(_interval, stoppingToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Subscription expiry service stopping.");
         }
     }
 }
