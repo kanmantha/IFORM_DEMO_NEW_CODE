@@ -1,0 +1,308 @@
+@model TemplateImportViewModel
+@{
+    ViewData["Title"] = "Import Poster Template";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="mb-1">Import a Poster Template</h1>
+        <p class="text-muted mb-0">
+            Upload an old poster, mark the text areas to erase and the logos to keep,
+            and we'll turn it into a template. Today's matter is then rendered into
+            those text areas automatically.
+        </p>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary">Back</a>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+}
+
+<form asp-action="Import" method="post" enctype="multipart/form-data" id="importForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="BoxesJson" />
+
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header"><strong>1 · Details</strong></div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label asp-for="Name" class="form-label"></label>
+                        <input asp-for="Name" class="form-control" placeholder="e.g. Weekend Menu Board" />
+                        <span asp-validation-for="Name" class="text-danger"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="Sector" class="form-label"></label>
+                        <select asp-for="Sector" class="form-select">
+                            @foreach (var s in Model.SectorOptions)
+                            {
+                                <option value="@s.Value">@s.Label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="Description" class="form-label"></label>
+                        <textarea asp-for="Description" class="form-control" rows="2"
+                                  placeholder="What's this layout for?"></textarea>
+                        <span asp-validation-for="Description" class="text-danger"></span>
+                    </div>
+                    <div class="mb-1">
+                        <label asp-for="Upload" class="form-label"></label>
+                        <input asp-for="Upload" type="file" id="fileInput" accept=".png,.jpg,.jpeg,.webp" class="form-control" />
+                        <div class="form-text">PNG, JPG or WEBP, up to 10 MB. A portrait poster works best.</div>
+                        <span asp-validation-for="Upload" class="text-danger"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header"><strong>2 · Mark the layout</strong></div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        <strong>Erase</strong> = old text areas (they'll become today's text zones).
+                        <strong>Keep</strong> = logos to keep on the template. Drag on the poster to draw.
+                    </p>
+                    <div class="btn-group w-100 mb-2" role="group" aria-label="Tool">
+                        <button type="button" class="btn btn-outline-danger active" id="toolErase">Erase text</button>
+                        <button type="button" class="btn btn-outline-success" id="toolKeep">Keep logo</button>
+                    </div>
+                    <div class="d-flex gap-2 mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="btnAuto">Auto-detect text</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnClear">Clear all</button>
+                    </div>
+                    <div id="boxList" class="d-flex flex-column gap-1"></div>
+                    <div id="boxCount" class="small text-muted mt-2">No areas marked yet.</div>
+                </div>
+            </div>
+
+            <div class="mt-3 d-flex gap-2">
+                <button type="submit" class="btn btn-gradient">Create Template</button>
+                <a asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong>Your poster</strong>
+                    <span class="small text-muted">Tool: <span id="toolLabel" class="text-danger">Erase text</span></span>
+                </div>
+                <div class="card-body text-center">
+                    <div id="canvasWrap" class="d-none mx-auto" style="max-width:420px;">
+                        <canvas id="editCanvas" class="img-fluid border rounded" style="max-width:100%; cursor:crosshair;"></canvas>
+                    </div>
+                    <div id="emptyHint" class="text-muted py-5">
+                        Choose a poster image above to start marking it.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (function () {
+            const canvas = document.getElementById('editCanvas');
+            const ctx = canvas.getContext('2d');
+            const fileInput = document.getElementById('fileInput');
+            const canvasWrap = document.getElementById('canvasWrap');
+            const emptyHint = document.getElementById('emptyHint');
+            const boxList = document.getElementById('boxList');
+            const boxCount = document.getElementById('boxCount');
+            const boxesInput = document.getElementById('BoxesJson');
+            const toolErase = document.getElementById('toolErase');
+            const toolKeep = document.getElementById('toolKeep');
+            const toolLabel = document.getElementById('toolLabel');
+
+            let img = null;
+            let boxes = [];
+            let tool = 'erase';
+            let drawing = false;
+            let start = { x: 0, y: 0 };
+            let drag = null;
+
+            function setTool(t) {
+                tool = t;
+                toolErase.classList.toggle('active', t === 'erase');
+                toolKeep.classList.toggle('active', t === 'keep');
+                toolLabel.textContent = t === 'erase' ? 'Erase text' : 'Keep logo';
+                toolLabel.className = t === 'erase' ? 'text-danger' : 'text-success';
+            }
+            toolErase.addEventListener('click', () => setTool('erase'));
+            toolKeep.addEventListener('click', () => setTool('keep'));
+
+            function pos(e) {
+                const r = canvas.getBoundingClientRect();
+                const x = (e.clientX - r.left) * (canvas.width / r.width);
+                const y = (e.clientY - r.top) * (canvas.height / r.height);
+                return {
+                    x: Math.max(0, Math.min(canvas.width, x)),
+                    y: Math.max(0, Math.min(canvas.height, y))
+                };
+            }
+
+            function norm(p) {
+                return { x: p.x / canvas.width, y: p.y / canvas.height };
+            }
+
+            function render() {
+                if (!img) return;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                const drawBox = (b, color) => {
+                    const x = b.x * canvas.width;
+                    const y = b.y * canvas.height;
+                    const w = b.w * canvas.width;
+                    const h = b.h * canvas.height;
+                    ctx.fillStyle = color + '33';
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.fillRect(x, y, w, h);
+                    ctx.strokeRect(x, y, w, h);
+                };
+
+                boxes.forEach(b => drawBox(b, b.type === 'keep' ? '#198754' : '#dc3545'));
+
+                if (drag) {
+                    const x = Math.min(drag.a.x, drag.b.x);
+                    const y = Math.min(drag.a.y, drag.b.y);
+                    const w = Math.abs(drag.b.x - drag.a.x);
+                    const h = Math.abs(drag.b.y - drag.a.y);
+                    ctx.fillStyle = (tool === 'keep' ? '#198754' : '#dc3545') + '55';
+                    ctx.strokeStyle = tool === 'keep' ? '#198754' : '#dc3545';
+                    ctx.lineWidth = 2;
+                    ctx.fillRect(x, y, w, h);
+                    ctx.strokeRect(x, y, w, h);
+                }
+            }
+
+            function sync() {
+                boxesInput.value = JSON.stringify(boxes.map(b => ({
+                    type: b.type, x: +b.x.toFixed(3), y: +b.y.toFixed(3), w: +b.w.toFixed(3), h: +b.h.toFixed(3)
+                })));
+                renderBoxList();
+                render();
+            }
+
+            function renderBoxList() {
+                boxList.innerHTML = '';
+                boxes.forEach((b, i) => {
+                    const div = document.createElement('div');
+                    div.className = 'input-group input-group-sm';
+                    const span = document.createElement('span');
+                    span.className = 'input-group-text ' + (b.type === 'keep' ? 'text-success' : 'text-danger');
+                    span.textContent = (b.type === 'keep' ? 'Keep' : 'Erase') + ' ' + (i + 1);
+                    const lbl = document.createElement('span');
+                    lbl.className = 'form-control';
+                    lbl.textContent = (b.x * 100).toFixed(0) + '% × ' + (b.y * 100).toFixed(0) + '% · ' + (b.w * 100).toFixed(0) + '% × ' + (b.h * 100).toFixed(0) + '%';
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'btn btn-outline-danger';
+                    btn.textContent = '✕';
+                    btn.addEventListener('click', () => { boxes.splice(i, 1); sync(); });
+                    div.appendChild(span);
+                    div.appendChild(lbl);
+                    div.appendChild(btn);
+                    boxList.appendChild(div);
+                });
+                boxCount.textContent = boxes.length === 0
+                    ? 'No areas marked yet.'
+                    : (boxes.length + ' area' + (boxes.length === 1 ? '' : 's') + ' marked (erase: ' + boxes.filter(b => b.type === 'erase').length + ', keep: ' + boxes.filter(b => b.type === 'keep').length + ').');
+            }
+
+            canvas.addEventListener('mousedown', e => {
+                if (!img) return;
+                drawing = true;
+                start = pos(e);
+                drag = { a: start, b: start };
+            });
+            canvas.addEventListener('mousemove', e => {
+                if (!drawing) return;
+                drag.b = pos(e);
+                render();
+            });
+            window.addEventListener('mouseup', () => {
+                if (!drawing) return;
+                drawing = false;
+                if (drag && Math.abs(drag.b.x - drag.a.x) > 3 && Math.abs(drag.b.y - drag.a.y) > 3) {
+                    const a = norm(drag.a);
+                    const b = norm(drag.b);
+                    boxes.push({
+                        type: tool,
+                        x: Math.min(a.x, b.x),
+                        y: Math.min(a.y, b.y),
+                        w: Math.abs(b.x - a.x),
+                        h: Math.abs(b.y - a.y)
+                    });
+                }
+                drag = null;
+                sync();
+            });
+
+            fileInput.addEventListener('change', () => {
+                const file = fileInput.files && fileInput.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = e => {
+                    const image = new Image();
+                    image.onload = () => {
+                        img = image;
+                        const maxW = 420;
+                        canvas.width = Math.min(maxW, image.naturalWidth);
+                        canvas.height = Math.round(canvas.width * image.naturalHeight / image.naturalWidth);
+                        canvasWrap.classList.remove('d-none');
+                        emptyHint.style.display = 'none';
+                        boxes = [];
+                        sync();
+                    };
+                    image.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+
+            document.getElementById('btnClear').addEventListener('click', () => {
+                boxes = [];
+                sync();
+            });
+
+            document.getElementById('btnAuto').addEventListener('click', () => {
+                const file = fileInput.files && fileInput.files[0];
+                if (!file) {
+                    alert('Choose a poster image first.');
+                    return;
+                }
+                const btn = document.getElementById('btnAuto');
+                const old = btn.textContent;
+                btn.disabled = true;
+                btn.textContent = 'Detecting…';
+                const fd = new FormData();
+                fd.append('upload', file);
+                fetch('/Templates/AutoDetect', { method: 'POST', body: fd })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data && Array.isArray(data.boxes)) {
+                            const detected = data.boxes.filter(b => b.w > 0 && b.h > 0);
+                            boxes = boxes.filter(b => b.type === 'keep');
+                            detected.forEach(b => boxes.push({
+                                type: 'erase',
+                                x: b.x, y: b.y, w: b.w, h: b.h
+                            }));
+                            sync();
+                            if (detected.length === 0) alert('No text areas detected. Draw the areas manually.');
+                        }
+                    })
+                    .catch(() => alert('Auto-detect failed. Draw the areas manually.'))
+                    .finally(() => {
+                        btn.disabled = false;
+                        btn.textContent = old;
+                    });
+            });
+        })();
+    </script>
+}

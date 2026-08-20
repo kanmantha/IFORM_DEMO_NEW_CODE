@@ -1,0 +1,314 @@
+using System.Text.Json;
+using DailyPosterGenerator.Data;
+using DailyPosterGenerator.Models;
+using DailyPosterGenerator.Services;
+using DailyPosterGenerator.Services.MultiTenancy;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace DailyPosterGenerator.Controllers;
+
+[Authorize]
+public class TemplatesController : Controller
+{
+    private static readonly string[] ThemeOptions = { "srv", "colorful", "light", "dark", "auto" };
+
+    private readonly IDbContextFactory<DailyPosterDbContext> _dbFactory;
+    private readonly TenantContext _tenant;
+    private readonly ITemplateThumbnailService _thumbnails;
+    private readonly ITemplateImportService _import;
+
+    public TemplatesController(
+        IDbContextFactory<DailyPosterDbContext> dbFactory,
+        TenantContext tenant,
+        ITemplateThumbnailService thumbnails,
+        ITemplateImportService import)
+    {
+        _dbFactory = dbFactory;
+        _tenant = tenant;
+        _thumbnails = thumbnails;
+        _import = import;
+    }
+
+    public async Task<IActionResult> Index(CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var templates = await db.PosterTemplates.AsNoTracking()
+            .Where(t => t.TenantId == _tenant.TenantId || t.TenantId == 0)
+            .OrderBy(t => t.TenantId == _tenant.TenantId ? 0 : 1)
+            .ThenBy(t => t.Name)
+            .ToListAsync(ct);
+
+        var changed = false;
+        foreach (var t in templates)
+        {
+            if (string.IsNullOrWhiteSpace(t.ThumbnailPath))
+            {
+                var path = await _thumbnails.EnsureThumbnailAsync(t, ct);
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    t.ThumbnailPath = path;
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed)
+        {
+            await using var dbw = await _dbFactory.CreateDbContextAsync(ct);
+            foreach (var t in templates.Where(t => t.Id > 0 && !string.IsNullOrWhiteSpace(t.ThumbnailPath)))
+            {
+                var entity = await dbw.PosterTemplates.FindAsync([t.Id], ct);
+                if (entity is not null && entity.ThumbnailPath != t.ThumbnailPath)
+                {
+                    entity.ThumbnailPath = t.ThumbnailPath;
+                }
+            }
+
+            await dbw.SaveChangesAsync(ct);
+        }
+
+        return View(templates);
+    }
+
+    public IActionResult Use(int id)
+    {
+        return RedirectToAction("Events", "Home", new { templateId = id });
+    }
+
+    [HttpGet]
+    public IActionResult Create()
+    {
+        ViewBag.ThemeOptions = ThemeOptions;
+        return View(new PosterTemplate { Theme = "colorful", IsActive = true });
+    }
+
+    [HttpGet]
+    public IActionResult Import()
+    {
+        return View(new TemplateImportViewModel());
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Import(TemplateImportViewModel model, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(model.Name))
+        {
+            ModelState.AddModelError(nameof(TemplateImportViewModel.Name), "Give the template a name.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        var result = await _import.ImportAsync(
+            _tenant.TenantId,
+            model.Name,
+            model.Description,
+            model.Sector,
+            model.Upload,
+            ParseBoxes(model.BoxesJson),
+            ct);
+
+        if (!result.Success || result.Template is null)
+        {
+            ModelState.AddModelError(string.Empty, result.Error ?? "Import failed.");
+            return View(model);
+        }
+
+        await using (var db = await _dbFactory.CreateDbContextAsync(ct))
+        {
+            db.PosterTemplates.Add(result.Template);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var path = await _thumbnails.EnsureThumbnailAsync(result.Template, ct);
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            await using var db2 = await _dbFactory.CreateDbContextAsync(ct);
+            var entity = await db2.PosterTemplates.FindAsync([result.Template.Id], ct);
+            if (entity is not null)
+            {
+                entity.ThumbnailPath = path;
+                await db2.SaveChangesAsync(ct);
+            }
+        }
+
+        TempData["Success"] = $"Template '{result.Template.Name}' created from your upload. Pick it on the Events page to reuse the layout.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AutoDetect(IFormFile? upload, CancellationToken ct = default)
+    {
+        if (upload is null || upload.Length == 0)
+        {
+            return Json(new { boxes = Array.Empty<ImportBox>() });
+        }
+
+        var boxes = await _import.DetectTextRegionsAsync(upload, ct);
+        return Json(new { boxes });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(PosterTemplate model, CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+        {
+            ViewBag.ThemeOptions = ThemeOptions;
+            return View(model);
+        }
+
+        model.TenantId = _tenant.TenantId;
+        model.IsSystem = false;
+        model.UpdatedAt = DateTime.UtcNow;
+        model.Theme = string.IsNullOrWhiteSpace(model.Theme) ? "colorful" : model.Theme.Trim().ToLowerInvariant();
+        model.Sector = SectorCatalog.Normalize(model.Sector);
+
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        if (await db.PosterTemplates.AnyAsync(t => t.TenantId == model.TenantId && t.Name == model.Name, ct))
+        {
+            ModelState.AddModelError(nameof(PosterTemplate.Name), "A template with this name already exists.");
+            ViewBag.ThemeOptions = ThemeOptions;
+            return View(model);
+        }
+
+        db.PosterTemplates.Add(model);
+        await db.SaveChangesAsync(ct);
+
+        var path = await _thumbnails.EnsureThumbnailAsync(model, ct);
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            model.ThumbnailPath = path;
+            db.PosterTemplates.Update(model);
+            await db.SaveChangesAsync(ct);
+        }
+
+        TempData["Success"] = $"Template '{model.Name}' created.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Edit(int id, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var template = await db.PosterTemplates
+            .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == _tenant.TenantId && !t.IsSystem, ct);
+
+        if (template is null)
+        {
+            return NotFound();
+        }
+
+        ViewBag.ThemeOptions = ThemeOptions;
+        return View(template);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, PosterTemplate model, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var template = await db.PosterTemplates
+            .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == _tenant.TenantId && !t.IsSystem, ct);
+
+        if (template is null)
+        {
+            return NotFound();
+        }
+
+        if (!ModelState.IsValid)
+        {
+            ViewBag.ThemeOptions = ThemeOptions;
+            return View(model);
+        }
+
+        var duplicate = await db.PosterTemplates.AnyAsync(
+            t => t.Id != id && t.TenantId == _tenant.TenantId && t.Name == model.Name, ct);
+        if (duplicate)
+        {
+            ModelState.AddModelError(nameof(PosterTemplate.Name), "A template with this name already exists.");
+            ViewBag.ThemeOptions = ThemeOptions;
+            return View(model);
+        }
+
+        template.Name = model.Name.Trim();
+        template.Description = model.Description?.Trim();
+        template.Theme = string.IsNullOrWhiteSpace(model.Theme) ? "colorful" : model.Theme.Trim().ToLowerInvariant();
+        template.AccentColor = model.AccentColor?.Trim();
+        template.Sector = SectorCatalog.Normalize(model.Sector);
+        if (template.IsImported)
+        {
+            template.TextColor = model.TextColor?.Trim();
+            template.BackgroundDim = Math.Clamp(model.BackgroundDim, 0, 90);
+        }
+
+        template.IsActive = model.IsActive;
+        template.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        var path = await _thumbnails.EnsureThumbnailAsync(template, ct);
+        if (!string.IsNullOrWhiteSpace(path) && path != template.ThumbnailPath)
+        {
+            template.ThumbnailPath = path;
+            await db.SaveChangesAsync(ct);
+        }
+
+        TempData["Success"] = $"Template '{template.Name}' updated.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var template = await db.PosterTemplates
+            .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == _tenant.TenantId && !t.IsSystem, ct);
+
+        if (template is null)
+        {
+            return NotFound();
+        }
+
+        // Detach any posters that reference this template (FK is Restrict).
+        var posters = await db.Posters.Where(p => p.TemplateId == id).ToListAsync(ct);
+        foreach (var p in posters)
+        {
+            p.TemplateId = null;
+            p.TemplateName = null;
+        }
+
+        db.PosterTemplates.Remove(template);
+        await db.SaveChangesAsync(ct);
+
+        TempData["Success"] = $"Template '{template.Name}' deleted.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    private static List<ImportBox> ParseBoxes(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new List<ImportBox>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<ImportBox>>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            }) ?? new List<ImportBox>();
+        }
+        catch (JsonException)
+        {
+            return new List<ImportBox>();
+        }
+    }
+}

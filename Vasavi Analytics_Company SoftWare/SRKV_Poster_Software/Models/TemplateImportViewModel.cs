@@ -1,0 +1,25 @@
+using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Http;
+
+namespace DailyPosterGenerator.Models;
+
+public class TemplateImportViewModel
+{
+    [Required, StringLength(200)]
+    public string Name { get; set; } = string.Empty;
+
+    [StringLength(1000)]
+    public string? Description { get; set; }
+
+    [StringLength(50)]
+    public string Sector { get; set; } = SectorCatalog.General;
+
+    [Required]
+    public IFormFile? Upload { get; set; }
+
+    /// <summary>JSON array of {Type:"erase"|"keep", X,Y,W,H} boxes in normalized 0..1 coords.</summary>
+    public string? BoxesJson { get; set; }
+
+    public IReadOnlyList<(string Value, string Label)> SectorOptions { get; } =
+        SectorCatalog.All.Select(s => (s, SectorCatalog.Label(s))).ToArray();
+}
