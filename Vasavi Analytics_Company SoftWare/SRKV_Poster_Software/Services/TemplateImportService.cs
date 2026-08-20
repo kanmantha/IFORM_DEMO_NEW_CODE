@@ -107,7 +107,7 @@ public class TemplateImportService : ITemplateImportService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Box editing failed; importing the image as-is.");
+                _logger.LogError(ex, "Box editing failed; importing the image as-is.");
                 layout = image;
             }
 
@@ -189,20 +189,46 @@ public class TemplateImportService : ITemplateImportService
     }
 
     /// <summary>
-    /// Removes the content inside "erase" boxes by re-blending the blurred background
-    /// there, then restores "keep" boxes (logos) from the original so they survive.
+    /// Removes the content inside "erase" boxes and restores "keep" boxes (logos).
+    ///
+    /// Each erase box is first seeded in a working copy with the colour of the band
+    /// of pixels just outside it (trimmed-mean of the border ring, so stray glyph
+    /// pixels do not bleed in), then the whole image is heavily blurred and that
+    /// blurred area is copied back over the box. Because the box no longer contains
+    /// the original text in the seed, the text cannot ghost through the blur - the
+    /// box is filled with a continuation of the surrounding background instead.
     /// </summary>
     private static SKImage ApplyBoxEdits(SKImage image, IReadOnlyList<ImportBox> boxes)
     {
         var info = new SKImageInfo(image.Width, image.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
-        using var surface = SKSurface.Create(info);
-        var canvas = surface.Canvas;
-        canvas.DrawImage(image, 0, 0);
-
         var erase = boxes.Where(b => !b.IsKeep).ToList();
-        if (erase.Count > 0)
+
+        using var sample = SKBitmap.FromImage(image);
+
+        // Seed: erase box interiors become a gradient derived from their border ring.
+        SKImage seed;
+        using (var seedSurface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the seed surface."))
         {
-            using var blurred = CreateBlurred(image);
+            var seedCanvas = seedSurface.Canvas;
+            seedCanvas.DrawImage(image, 0, 0);
+            foreach (var box in erase)
+            {
+                var rect = BoxRect(box, image.Width, image.Height);
+                using var shader = MakeFillShader(rect, SampleBorder(sample, rect));
+                using var paint = new SKPaint { Shader = shader, IsAntialias = true };
+                seedCanvas.DrawRect(rect, paint);
+            }
+
+            seed = seedSurface.Snapshot();
+        }
+
+        using (seed)
+        {
+            using var blurred = CreateBlurred(seed);
+            using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the edit surface.");
+            var canvas = surface.Canvas;
+            canvas.DrawImage(image, 0, 0);
+
             foreach (var box in erase)
             {
                 var rect = BoxRect(box, image.Width, image.Height);
@@ -211,22 +237,22 @@ public class TemplateImportService : ITemplateImportService
                 canvas.DrawImage(blurred, rect, rect, SKSamplingOptions.Default, null);
                 canvas.Restore();
             }
-        }
 
-        foreach (var box in boxes.Where(b => b.IsKeep))
-        {
-            var rect = BoxRect(box, image.Width, image.Height);
-            canvas.DrawImage(image, rect, rect, SKSamplingOptions.Default, null);
-        }
+            foreach (var box in boxes.Where(b => b.IsKeep))
+            {
+                var rect = BoxRect(box, image.Width, image.Height);
+                canvas.DrawImage(image, rect, rect, SKSamplingOptions.Default, null);
+            }
 
-        return surface.Snapshot();
+            return surface.Snapshot();
+        }
     }
 
     private static SKImage CreateBlurred(SKImage image)
     {
-        var sigma = Math.Max(24f, Math.Max(image.Width, image.Height) / 18f);
+        var sigma = Math.Min(160f, Math.Max(24f, Math.Max(image.Width, image.Height) / 18f));
         var info = new SKImageInfo(image.Width, image.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
-        using var surface = SKSurface.Create(info);
+        using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the blur surface.");
         using var paint = new SKPaint { ImageFilter = SKImageFilter.CreateBlur(sigma, sigma) };
         surface.Canvas.DrawImage(image, 0, 0, paint);
         return surface.Snapshot();
@@ -234,6 +260,100 @@ public class TemplateImportService : ITemplateImportService
 
     private static SKRect BoxRect(ImportBox box, int width, int height) =>
         SKRect.Create(box.X * width, box.Y * height, box.W * width, box.H * height);
+
+    /// <summary>Robust average of a pixel set: drops the extreme 12.5% on each side so
+    /// a few glyph pixels touching the ring do not skew the background colour.</summary>
+    private static SKColor TrimmedMean(IReadOnlyList<SKColor> pixels)
+    {
+        if (pixels.Count == 0)
+        {
+            return new SKColor(0, 0, 0);
+        }
+
+        static int Center(List<int> l)
+        {
+            var skip = l.Count / 8;
+            if (l.Count - 2 * skip < 2)
+            {
+                return l[l.Count / 2];
+            }
+
+            return (int)Math.Round(l.Skip(skip).Take(l.Count - 2 * skip).Average());
+        }
+
+        return new SKColor(
+            (byte)Center(pixels.Select(p => (int)p.Red).OrderBy(v => v).ToList()),
+            (byte)Center(pixels.Select(p => (int)p.Green).OrderBy(v => v).ToList()),
+            (byte)Center(pixels.Select(p => (int)p.Blue).OrderBy(v => v).ToList()));
+    }
+
+    /// <summary>Samples the band of pixels just outside each edge of <paramref name="rect"/>.</summary>
+    private static (SKColor Top, SKColor Bottom, SKColor Left, SKColor Right) SampleBorder(SKBitmap bmp, SKRect rect)
+    {
+        var thick = Math.Max(4, (int)Math.Min(24, Math.Min(rect.Width, rect.Height) * 0.05));
+        var x0 = Math.Max(0, (int)rect.Left);
+        var x1 = Math.Min(bmp.Width - 1, (int)rect.Right);
+        var y0 = Math.Max(0, (int)rect.Top);
+        var y1 = Math.Min(bmp.Height - 1, (int)rect.Bottom);
+
+        var top = new List<SKColor>();
+        var bottom = new List<SKColor>();
+        var left = new List<SKColor>();
+        var right = new List<SKColor>();
+        for (var x = x0; x <= x1; x++)
+        {
+            for (var k = 1; k <= thick; k++)
+            {
+                if (y0 - k >= 0)
+                {
+                    top.Add(bmp.GetPixel(x, y0 - k));
+                }
+
+                if (y1 + k < bmp.Height)
+                {
+                    bottom.Add(bmp.GetPixel(x, y1 + k));
+                }
+            }
+        }
+
+        for (var y = y0; y <= y1; y++)
+        {
+            for (var k = 1; k <= thick; k++)
+            {
+                if (x0 - k >= 0)
+                {
+                    left.Add(bmp.GetPixel(x0 - k, y));
+                }
+
+                if (x1 + k < bmp.Width)
+                {
+                    right.Add(bmp.GetPixel(x1 + k, y));
+                }
+            }
+        }
+
+        return (TrimmedMean(top), TrimmedMean(bottom), TrimmedMean(left), TrimmedMean(right));
+    }
+
+    /// <summary>Builds a fill for an erase box: a vertical or horizontal gradient from the
+    /// ring colours (whichever axis varies more), or a solid colour when the ring is flat.</summary>
+    private static SKShader MakeFillShader(SKRect rect, (SKColor Top, SKColor Bottom, SKColor Left, SKColor Right) border)
+    {
+        var vertical = ColorDist(border.Top, border.Bottom) >= ColorDist(border.Left, border.Right);
+        var c0 = vertical ? border.Top : border.Left;
+        var c1 = vertical ? border.Bottom : border.Right;
+        if (ColorDist(c0, c1) < 10)
+        {
+            return SKShader.CreateColor(c0);
+        }
+
+        var p0 = vertical ? new SKPoint(rect.MidX, rect.Top) : new SKPoint(rect.Left, rect.MidY);
+        var p1 = vertical ? new SKPoint(rect.MidX, rect.Bottom) : new SKPoint(rect.Right, rect.MidY);
+        return SKShader.CreateLinearGradient(p0, p1, new[] { c0, c1 }, null, SKShaderTileMode.Clamp);
+    }
+
+    private static float ColorDist(SKColor a, SKColor b) =>
+        MathF.Sqrt(MathF.Pow(a.Red - b.Red, 2) + MathF.Pow(a.Green - b.Green, 2) + MathF.Pow(a.Blue - b.Blue, 2));
 
     private static string BuildRegionsJson(IReadOnlyList<ImportBox> boxes)
     {
