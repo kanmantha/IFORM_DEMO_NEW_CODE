@@ -23,6 +23,15 @@
     @Html.AntiForgeryToken()
     <input type="hidden" name="date" id="previewDate" value="@Model.Date.ToString("yyyy-MM-dd")" />
 
+    <div class="card mb-4">
+        <div class="card-body py-3 d-flex align-items-center gap-3 flex-wrap">
+            <label for="datePicker" class="fw-semibold mb-0">📅 Poster date</label>
+            <input type="date" id="datePicker" class="form-control" style="max-width:190px;"
+                   value="@Model.Date.ToString("yyyy-MM-dd")" />
+            <span class="small text-muted">Change the date to load that day's events.</span>
+        </div>
+    </div>
+
     @if (Model.Templates.Count > 0)
     {
         <div class="card mb-4">
@@ -137,6 +146,15 @@
                 counter.textContent = count;
             };
             checks.forEach(c => c.addEventListener('change', update));
+
+            const picker = document.getElementById('datePicker');
+            if (picker) {
+                picker.addEventListener('change', () => {
+                    if (picker.value) {
+                        window.location.href = '@Url.Action("Events", "Home")' + '?date=' + encodeURIComponent(picker.value);
+                    }
+                });
+            }
 
             const img = document.getElementById('previewImg');
             const loading = document.getElementById('previewLoading');

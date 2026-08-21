@@ -28,7 +28,7 @@
                             <a class="nav-link" asp-controller="Home" asp-action="Index">Dashboard</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" asp-controller="Home" asp-action="Events">Generate</a>
+                            <a class="nav-link" asp-controller="Studio" asp-action="Index">Generate</a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" asp-controller="Templates" asp-action="Index">Templates</a>
@@ -37,19 +37,12 @@
                             <a class="nav-link" asp-controller="Posters" asp-action="Index">Gallery</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" asp-controller="Posters" asp-action="Tomorrow">Tomorrow</a>
-                        </li>
-                        <li class="nav-item">
                             <a class="nav-link" asp-controller="Settings" asp-action="Index">Settings</a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" asp-controller="Subscription" asp-action="Index">Subscription</a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="Logs" asp-action="Index">Logs</a>
-                        </li>
                     </ul>
-                    <a class="btn btn-sm btn-gradient me-2" asp-controller="Home" asp-action="Events">New Poster</a>
                     <div class="d-flex align-items-center gap-2">
                         <span class="navbar-text small me-1">@User.Identity?.Name</span>
                         <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
