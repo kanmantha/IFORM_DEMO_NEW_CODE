@@ -34,8 +34,13 @@ public class StudioController : Controller
         _logger = logger;
     }
 
-    public IActionResult Index()
+    public IActionResult Index(DateTime? date)
     {
+        if (date.HasValue)
+        {
+            ViewBag.InitialDate = date.Value.Date.ToString("yyyy-MM-dd");
+        }
+
         return View();
     }
 

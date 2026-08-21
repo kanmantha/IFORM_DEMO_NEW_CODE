@@ -1575,6 +1575,33 @@ public class SkiaSharpPosterImageService : IPosterImageService
 
     // ---------------------------------------------------------------- save
 
+    /// <summary>Previews are throwaway render caches; delete ones older than 24h. Best effort.</summary>
+    private static void CleanupOldPreviews(string previewDir)
+    {
+        try
+        {
+            var cutoff = DateTime.UtcNow.AddHours(-24);
+            foreach (var file in Directory.EnumerateFiles(previewDir, "preview_*.png"))
+            {
+                try
+                {
+                    if (File.GetLastWriteTimeUtc(file) < cutoff)
+                    {
+                        File.Delete(file);
+                    }
+                }
+                catch (IOException)
+                {
+                    // A concurrent request may still be streaming this file; skip it.
+                }
+            }
+        }
+        catch
+        {
+            // Cleanup must never break rendering.
+        }
+    }
+
     private string SaveSurface(SKSurface surface, Poster poster, bool preview = false)
     {
         if (preview)
@@ -1589,6 +1616,7 @@ public class SkiaSharpPosterImageService : IPosterImageService
                 pdata.SaveTo(pstream);
             }
 
+            CleanupOldPreviews(previewDir);
             return "/posters/previews/" + Path.GetFileName(previewPath);
         }
 

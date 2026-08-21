@@ -132,7 +132,8 @@
         const chips = document.getElementById('studioChips');
         const token = document.querySelector('#studioForm input[name="__RequestVerificationToken"]').value;
         const dateInput = document.getElementById('studioDate');
-        dateInput.value = new Date().toLocaleDateString('en-CA');
+        const initialDate = '@(ViewBag.InitialDate as string ?? string.Empty)';
+        dateInput.value = initialDate || new Date().toLocaleDateString('en-CA');
 
         let round = 0;
         let busy = false;

@@ -13,10 +13,13 @@
                 and renders a share-ready poster — saved to SQL Server and ready to publish in one click.
             </p>
             <div class="d-flex flex-wrap gap-2">
+                <a asp-action="Index" asp-controller="Studio" class="btn btn-lg btn-gradient">
+                    ✨ Open Poster Studio
+                </a>
                 <form asp-action="GenerateTodayAuto" asp-controller="Home" method="post" class="d-inline">
                     @Html.AntiForgeryToken()
-                    <button type="submit" class="btn btn-lg btn-gradient">
-                        @(Model.TodaysPoster is not null ? "View Today's Poster" : "Generate Today's Poster")
+                    <button type="submit" class="btn btn-lg btn-outline-light">
+                        @(Model.TodaysPoster is not null ? "View Today's Poster" : "Quick Generate Today")
                     </button>
                 </form>
                 <a asp-action="Events" asp-controller="Home" class="btn btn-lg btn-outline-light">Preview &amp; Customize</a>
@@ -84,7 +87,7 @@
                         var has = posterDates.Contains(d);
                         var isToday = d == Model.Today;
                         <a class="cal-cell @(has ? "has-poster" : "") @(isToday ? "today" : "")"
-                           asp-action="Events" asp-route-date="@d.ToString("yyyy-MM-dd")" title="@d.ToString("MMMM d, yyyy")">
+                           asp-controller="Studio" asp-action="Index" asp-route-date="@d.ToString("yyyy-MM-dd")" title="@d.ToString("MMMM d, yyyy")">
                             <span>@day</span>
                             @if (has)
                             {
@@ -96,7 +99,7 @@
                 <div class="small text-muted mt-3 d-flex gap-4">
                     <span><span class="cal-dot d-inline-block"></span> has a poster</span>
                     <span><span class="cal-today-dot d-inline-block"></span> today</span>
-                    <span>Click any day to preview its events and generate posters.</span>
+                    <span>Click any day to open the Studio with that date preselected.</span>
                 </div>
             </div>
         </div>
@@ -154,7 +157,7 @@
         <div class="empty-icon">🎨</div>
         <h4>No posters yet</h4>
         <p>Generate your first poster to see it here.</p>
-        <a asp-action="Events" asp-controller="Home" class="btn btn-gradient">Generate a Poster</a>
+        <a asp-action="Index" asp-controller="Studio" class="btn btn-gradient">Open Poster Studio</a>
     </div>
 }
 else
