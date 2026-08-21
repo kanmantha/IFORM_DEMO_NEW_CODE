@@ -35,6 +35,13 @@ public class PosterTemplate
     [StringLength(500)]
     public string? BackgroundImagePath { get; set; }
 
+    /// <summary>Relative path of the untouched original upload, kept so imported layouts can be re-edited.</summary>
+    [StringLength(500)]
+    public string? OriginalBackgroundPath { get; set; }
+
+    /// <summary>JSON array of import boxes (erase / erase-logo / keep) applied to the original upload.</summary>
+    public string? ImportBoxesJson { get; set; }
+
     /// <summary>Optional hex text colour used on top of the background image.</summary>
     [StringLength(20)]
     public string? TextColor { get; set; }

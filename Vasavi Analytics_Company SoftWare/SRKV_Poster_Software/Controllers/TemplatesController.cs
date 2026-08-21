@@ -147,11 +147,35 @@ public class TemplatesController : Controller
     {
         if (upload is null || upload.Length == 0)
         {
-            return Json(new { boxes = Array.Empty<ImportBox>() });
+            return Json(new { text = Array.Empty<ImportBox>(), logos = Array.Empty<ImportBox>() });
         }
 
-        var boxes = await _import.DetectTextRegionsAsync(upload, ct);
-        return Json(new { boxes });
+        var detected = await _import.DetectRegionsAsync(upload, ct);
+        return Json(new { text = detected.TextBoxes, logos = detected.LogoBoxes });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AutoDetectTemplate(int id, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var template = await db.PosterTemplates.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == _tenant.TenantId && !t.IsSystem, ct);
+
+        // Legacy imports have no stored original; detect on the processed background.
+        var sourcePath = template is null
+            ? null
+            : (string.IsNullOrWhiteSpace(template.OriginalBackgroundPath)
+                ? template.BackgroundImagePath
+                : template.OriginalBackgroundPath);
+
+        if (string.IsNullOrWhiteSpace(sourcePath))
+        {
+            return Json(new { text = Array.Empty<ImportBox>(), logos = Array.Empty<ImportBox>() });
+        }
+
+        var detected = await _import.DetectRegionsFromFileAsync(sourcePath, ct);
+        return Json(new { text = detected.TextBoxes, logos = detected.LogoBoxes });
     }
 
     [HttpPost]
@@ -206,12 +230,13 @@ public class TemplatesController : Controller
         }
 
         ViewBag.ThemeOptions = ThemeOptions;
+        ViewBag.ImportBoxesJson = template.ImportBoxesJson;
         return View(template);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(int id, PosterTemplate model, CancellationToken ct)
+    public async Task<IActionResult> Edit(int id, PosterTemplate model, string? editorBoxesJson, CancellationToken ct)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var template = await db.PosterTemplates
@@ -225,6 +250,7 @@ public class TemplatesController : Controller
         if (!ModelState.IsValid)
         {
             ViewBag.ThemeOptions = ThemeOptions;
+            ViewBag.ImportBoxesJson = template.ImportBoxesJson;
             return View(model);
         }
 
@@ -234,6 +260,7 @@ public class TemplatesController : Controller
         {
             ModelState.AddModelError(nameof(PosterTemplate.Name), "A template with this name already exists.");
             ViewBag.ThemeOptions = ThemeOptions;
+            ViewBag.ImportBoxesJson = template.ImportBoxesJson;
             return View(model);
         }
 
@@ -252,6 +279,22 @@ public class TemplatesController : Controller
         template.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
+
+        // Re-apply the poster editor's erase / erase-logo / keep boxes to the original upload
+        // (legacy templates fall back to their processed background inside ReprocessAsync).
+        var hasPosterSource = !string.IsNullOrWhiteSpace(template.OriginalBackgroundPath)
+            || !string.IsNullOrWhiteSpace(template.BackgroundImagePath);
+        if (!string.IsNullOrWhiteSpace(editorBoxesJson) && hasPosterSource)
+        {
+            var reprocess = await _import.ReprocessAsync(template, ParseBoxes(editorBoxesJson), ct);
+            if (!reprocess.Success)
+            {
+                TempData["Error"] = reprocess.Error ?? "Could not update the poster layout.";
+                return RedirectToAction(nameof(Edit), new { id });
+            }
+
+            await db.SaveChangesAsync(ct);
+        }
 
         var path = await _thumbnails.EnsureThumbnailAsync(template, ct);
         if (!string.IsNullOrWhiteSpace(path) && path != template.ThumbnailPath)

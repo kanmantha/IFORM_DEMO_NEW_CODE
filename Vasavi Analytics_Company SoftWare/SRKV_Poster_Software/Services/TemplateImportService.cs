@@ -17,14 +17,26 @@ public interface ITemplateImportService
         CancellationToken ct = default);
 
     /// <summary>
-    /// Heuristically locates likely text blocks in an uploaded poster and returns them
-    /// as normalized erase boxes, so users get a starting point for the layout editor.
-    /// Colourful areas (typically logos) are skipped.
+    /// Heuristically locates likely text blocks and logo areas in an uploaded poster so
+    /// the import editor can offer one-click erasing. Text detection skips colourful
+    /// regions (logos) and logo detection skips low-saturation text.
     /// </summary>
-    Task<IReadOnlyList<ImportBox>> DetectTextRegionsAsync(IFormFile file, CancellationToken ct = default);
+    Task<DetectionResult> DetectRegionsAsync(IFormFile file, CancellationToken ct = default);
+
+    /// <summary>Same detection as <see cref="DetectRegionsAsync"/> but on a stored image under wwwroot.</summary>
+    Task<DetectionResult> DetectRegionsFromFileAsync(string? relativePath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Re-applies erase / erase-logo / keep boxes to a template's untouched original
+    /// upload and replaces its processed background, text regions and box history.
+    /// </summary>
+    Task<TemplateImportResult> ReprocessAsync(PosterTemplate template, IReadOnlyList<ImportBox>? boxes, CancellationToken ct = default);
 }
 
 public record TemplateImportResult(bool Success, PosterTemplate? Template, string? Error);
+
+/// <summary>Auto-detected regions of an uploaded poster, normalized 0..1.</summary>
+public record DetectionResult(IReadOnlyList<ImportBox> TextBoxes, IReadOnlyList<ImportBox> LogoBoxes);
 
 /// <summary>
 /// Turns an uploaded poster image into a reusable PosterTemplate: the image becomes
@@ -115,6 +127,7 @@ public class TemplateImportService : ITemplateImportService
             {
                 var (accent, textColor) = AnalyzeColors(layout);
                 var savedPath = await SaveBackgroundAsync(tenantId, layout, ext, ct);
+                var originalPath = await SaveOriginalAsync(tenantId, bytes, ext, ct);
 
                 var template = new PosterTemplate
                 {
@@ -129,6 +142,8 @@ public class TemplateImportService : ITemplateImportService
                     AccentColor = accent,
                     TextColor = textColor,
                     BackgroundImagePath = savedPath,
+                    OriginalBackgroundPath = originalPath,
+                    ImportBoxesJson = validBoxes.Count > 0 ? JsonSerializer.Serialize(validBoxes) : null,
                     BackgroundDim = 30,
                     TextRegionsJson = BuildRegionsJson(validBoxes),
                     CreatedAt = DateTime.UtcNow,
@@ -140,11 +155,11 @@ public class TemplateImportService : ITemplateImportService
         }
     }
 
-    public async Task<IReadOnlyList<ImportBox>> DetectTextRegionsAsync(IFormFile file, CancellationToken ct = default)
+    public async Task<DetectionResult> DetectRegionsAsync(IFormFile file, CancellationToken ct = default)
     {
         if (file is null || file.Length == 0)
         {
-            return Array.Empty<ImportBox>();
+            return new DetectionResult(Array.Empty<ImportBox>(), Array.Empty<ImportBox>());
         }
 
         byte[] bytes;
@@ -157,12 +172,132 @@ public class TemplateImportService : ITemplateImportService
         try
         {
             using var image = SKImage.FromEncodedData(bytes);
-            return DetectTextBlocks(image);
+            return DetectCore(image);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Auto text detection failed.");
-            return Array.Empty<ImportBox>();
+            _logger.LogWarning(ex, "Auto detection failed.");
+            return new DetectionResult(Array.Empty<ImportBox>(), Array.Empty<ImportBox>());
+        }
+    }
+
+    public Task<DetectionResult> DetectRegionsFromFileAsync(string? relativePath, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            return Task.FromResult(new DetectionResult(Array.Empty<ImportBox>(), Array.Empty<ImportBox>()));
+        }
+
+        var webRoot = _env.WebRootPath;
+        if (string.IsNullOrWhiteSpace(webRoot))
+        {
+            return Task.FromResult(new DetectionResult(Array.Empty<ImportBox>(), Array.Empty<ImportBox>()));
+        }
+
+        var fullPath = Path.Combine(webRoot, relativePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(fullPath))
+        {
+            return Task.FromResult(new DetectionResult(Array.Empty<ImportBox>(), Array.Empty<ImportBox>()));
+        }
+
+        try
+        {
+            using var image = SKImage.FromEncodedData(fullPath);
+            return Task.FromResult(DetectCore(image));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Auto detection failed for {Path}.", relativePath);
+            return Task.FromResult(new DetectionResult(Array.Empty<ImportBox>(), Array.Empty<ImportBox>()));
+        }
+    }
+
+    private static DetectionResult DetectCore(SKImage image)
+    {
+        var logos = DetectLogoBlocks(image);
+        var text = DetectTextBlocks(image, logos);
+        return new DetectionResult(text, logos);
+    }
+
+    public async Task<TemplateImportResult> ReprocessAsync(
+        PosterTemplate template, IReadOnlyList<ImportBox>? boxes, CancellationToken ct = default)
+    {
+        // Templates imported before re-editing existed have no stored original; fall
+        // back to their processed background and promote it to the new "original".
+        var sourceRelative = string.IsNullOrWhiteSpace(template?.OriginalBackgroundPath)
+            ? template?.BackgroundImagePath
+            : template.OriginalBackgroundPath;
+        if (template is null || string.IsNullOrWhiteSpace(sourceRelative))
+        {
+            return new TemplateImportResult(false, null, "This template has no poster image to re-edit.");
+        }
+
+        var webRoot = _env.WebRootPath;
+        if (string.IsNullOrWhiteSpace(webRoot))
+        {
+            return new TemplateImportResult(false, null, "Storage is not available.");
+        }
+
+        var fullPath = Path.Combine(
+            webRoot, sourceRelative.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(fullPath))
+        {
+            return new TemplateImportResult(false, null, "The poster image file is missing on disk.");
+        }
+
+        SKImage? image;
+        try
+        {
+            image = SKImage.FromEncodedData(fullPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to decode the original upload of template {TemplateId}.", template.Id);
+            return new TemplateImportResult(false, null, "The original image could not be read.");
+        }
+
+        using (image)
+        {
+            var validBoxes = NormalizeBoxes(boxes);
+            SKImage layout;
+            try
+            {
+                layout = validBoxes.Count > 0 ? ApplyBoxEdits(image, validBoxes) : image;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Reprocessing box editing failed for template {TemplateId}; using the raw original.", template.Id);
+                layout = image;
+            }
+
+            using (layout)
+            {
+                var savedPath = await SaveBackgroundAsync(template.TenantId, layout, ".png", ct);
+                if (savedPath is null)
+                {
+                    return new TemplateImportResult(false, null, "Could not save the updated background.");
+                }
+
+                var previousBg = template.BackgroundImagePath;
+                if (string.IsNullOrWhiteSpace(template.OriginalBackgroundPath))
+                {
+                    // Legacy template: the pre-edit image becomes the new editing source.
+                    template.OriginalBackgroundPath = sourceRelative;
+                }
+
+                // Never delete the file that just became (or already was) the original.
+                if (!string.Equals(previousBg, template.OriginalBackgroundPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    DeleteImportedFile(previousBg, savedPath);
+                }
+
+                // Accent/text colours are left untouched so user customizations survive.
+                template.BackgroundImagePath = savedPath;
+                template.TextRegionsJson = BuildRegionsJson(validBoxes);
+                template.ImportBoxesJson = validBoxes.Count > 0 ? JsonSerializer.Serialize(validBoxes) : null;
+                template.UpdatedAt = DateTime.UtcNow;
+                return new TemplateImportResult(true, template, null);
+            }
         }
     }
 
@@ -182,7 +317,8 @@ public class TemplateImportService : ITemplateImportService
             var y = Math.Clamp(b.Y, 0f, 0.99f);
             var w = Math.Clamp(b.W, 0.02f, 1f - x);
             var h = Math.Clamp(b.H, 0.02f, 1f - y);
-            result.Add(new ImportBox { Type = b.IsKeep ? "keep" : "erase", X = x, Y = y, W = w, H = h });
+            var type = b.IsKeep ? "keep" : b.IsLogoErase ? "erase-logo" : "erase";
+            result.Add(new ImportBox { Type = type, X = x, Y = y, W = w, H = h });
         }
 
         return result;
@@ -191,66 +327,86 @@ public class TemplateImportService : ITemplateImportService
     /// <summary>
     /// Removes the content inside "erase" boxes and restores "keep" boxes (logos).
     ///
-    /// Each erase box is first seeded in a working copy with the colour of the band
-    /// of pixels just outside it (trimmed-mean of the border ring, so stray glyph
-    /// pixels do not bleed in), then the whole image is heavily blurred and that
-    /// blurred area is copied back over the box. Because the box no longer contains
-    /// the original text in the seed, the text cannot ghost through the blur - the
-    /// box is filled with a continuation of the surrounding background instead.
+    /// Each erase box is seeded in a working copy with the colour of the band of pixels
+    /// just outside it (trimmed-mean of the border ring, so stray glyph pixels do not
+    /// bleed in). The seed region extends beyond the box by a blur-radius margin, so
+    /// when the seeded copy is blurred, box-edge pixels average seed fill on both sides
+    /// instead of picking up bright text that sits just outside the box. Seeding runs
+    /// twice: the second pass re-samples rings from the already-seeded image so adjacent
+    /// boxes do not contaminate each other's fill colour. The blurred area is then copied
+    /// back over each box and "keep" boxes are restored pixel-perfect from the original.
     /// </summary>
     private static SKImage ApplyBoxEdits(SKImage image, IReadOnlyList<ImportBox> boxes)
     {
         var info = new SKImageInfo(image.Width, image.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
         var erase = boxes.Where(b => !b.IsKeep).ToList();
+        if (erase.Count == 0)
+        {
+            return image;
+        }
+
+        var pad = (int)Math.Clamp(BlurSigma(image) * 1.5f, 12f, 120f);
 
         using var sample = SKBitmap.FromImage(image);
+        using var seed1 = BuildSeed(image, sample, erase, pad, info);
+        using var seedBmp = SKBitmap.FromImage(seed1);
+        using var seed2 = BuildSeed(seed1, seedBmp, erase, pad, info);
 
-        // Seed: erase box interiors become a gradient derived from their border ring.
-        SKImage seed;
-        using (var seedSurface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the seed surface."))
+        using var blurred = CreateBlurred(seed2);
+        using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the edit surface.");
+        var canvas = surface.Canvas;
+        canvas.DrawImage(image, 0, 0);
+
+        foreach (var box in erase)
         {
-            var seedCanvas = seedSurface.Canvas;
-            seedCanvas.DrawImage(image, 0, 0);
-            foreach (var box in erase)
-            {
-                var rect = BoxRect(box, image.Width, image.Height);
-                using var shader = MakeFillShader(rect, SampleBorder(sample, rect));
-                using var paint = new SKPaint { Shader = shader, IsAntialias = true };
-                seedCanvas.DrawRect(rect, paint);
-            }
-
-            seed = seedSurface.Snapshot();
+            var rect = BoxRect(box, image.Width, image.Height);
+            canvas.Save();
+            canvas.ClipRect(rect);
+            canvas.DrawImage(blurred, rect, rect, SKSamplingOptions.Default, null);
+            canvas.Restore();
         }
 
-        using (seed)
+        foreach (var box in boxes.Where(b => b.IsKeep))
         {
-            using var blurred = CreateBlurred(seed);
-            using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the edit surface.");
-            var canvas = surface.Canvas;
-            canvas.DrawImage(image, 0, 0);
-
-            foreach (var box in erase)
-            {
-                var rect = BoxRect(box, image.Width, image.Height);
-                canvas.Save();
-                canvas.ClipRect(rect);
-                canvas.DrawImage(blurred, rect, rect, SKSamplingOptions.Default, null);
-                canvas.Restore();
-            }
-
-            foreach (var box in boxes.Where(b => b.IsKeep))
-            {
-                var rect = BoxRect(box, image.Width, image.Height);
-                canvas.DrawImage(image, rect, rect, SKSamplingOptions.Default, null);
-            }
-
-            return surface.Snapshot();
+            var rect = BoxRect(box, image.Width, image.Height);
+            canvas.DrawImage(image, rect, rect, SKSamplingOptions.Default, null);
         }
+
+        return surface.Snapshot();
     }
+
+    /// <summary>Draws a copy of <paramref name="source"/> with every erase box's padded
+    /// area replaced by a gradient derived from that area's border ring.</summary>
+    private static SKImage BuildSeed(
+        SKImage source, SKBitmap ringSource, IReadOnlyList<ImportBox> erase, int pad, SKImageInfo info)
+    {
+        using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the seed surface.");
+        var canvas = surface.Canvas;
+        canvas.DrawImage(source, 0, 0);
+        foreach (var box in erase)
+        {
+            var rect = PaddedRect(BoxRect(box, info.Width, info.Height), pad, info.Width, info.Height);
+            using var shader = MakeFillShader(rect, SampleBorder(ringSource, rect));
+            using var paint = new SKPaint { Shader = shader, IsAntialias = true };
+            canvas.DrawRect(rect, paint);
+        }
+
+        return surface.Snapshot();
+    }
+
+    private static SKRect PaddedRect(SKRect rect, int pad, int width, int height) =>
+        SKRect.Create(
+            Math.Max(0f, rect.Left - pad),
+            Math.Max(0f, rect.Top - pad),
+            Math.Min(width, rect.Right + pad) - Math.Max(0f, rect.Left - pad),
+            Math.Min(height, rect.Bottom + pad) - Math.Max(0f, rect.Top - pad));
+
+    private static float BlurSigma(SKImage image) =>
+        Math.Min(160f, Math.Max(24f, Math.Max(image.Width, image.Height) / 18f));
 
     private static SKImage CreateBlurred(SKImage image)
     {
-        var sigma = Math.Min(160f, Math.Max(24f, Math.Max(image.Width, image.Height) / 18f));
+        var sigma = BlurSigma(image);
         var info = new SKImageInfo(image.Width, image.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
         using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the blur surface.");
         using var paint = new SKPaint { ImageFilter = SKImageFilter.CreateBlur(sigma, sigma) };
@@ -332,7 +488,14 @@ public class TemplateImportService : ITemplateImportService
             }
         }
 
-        return (TrimmedMean(top), TrimmedMean(bottom), TrimmedMean(left), TrimmedMean(right));
+        // Sides that fall outside the image (box flush to an edge) fall back to the
+        // overall ring colour instead of an arbitrary black.
+        var overall = TrimmedMean(top.Concat(bottom).Concat(left).Concat(right).ToList());
+        return (
+            top.Count > 0 ? TrimmedMean(top) : overall,
+            bottom.Count > 0 ? TrimmedMean(bottom) : overall,
+            left.Count > 0 ? TrimmedMean(left) : overall,
+            right.Count > 0 ? TrimmedMean(right) : overall);
     }
 
     /// <summary>Builds a fill for an erase box: a vertical or horizontal gradient from the
@@ -357,7 +520,8 @@ public class TemplateImportService : ITemplateImportService
 
     private static string BuildRegionsJson(IReadOnlyList<ImportBox> boxes)
     {
-        var erase = boxes.Where(b => !b.IsKeep).ToList();
+        // Logo erases are removed from the background but do not become text zones.
+        var erase = boxes.Where(b => !b.IsKeep && !b.IsLogoErase).ToList();
         if (erase.Count == 0)
         {
             return DefaultRegionsJson();
@@ -391,15 +555,21 @@ public class TemplateImportService : ITemplateImportService
 
     // ------------------------------------------------------------- auto detection
 
-    /// <summary>
-    /// Simple heuristic: downscale, split into a coarse grid, mark cells with high
-    /// luminance variance and low colour saturation as "text", group adjacent cells,
-    /// and return the groups as normalized erase boxes. Colourful regions (logos) are
-    /// left out so they can be kept.
-    /// </summary>
-    private static IReadOnlyList<ImportBox> DetectTextBlocks(SKImage image)
+    private sealed class CellStats
     {
-        const int targetWidth = 96;
+        public int Width;
+        public int Height;
+        public int Cols;
+        public int Rows;
+        public float[] Variance = Array.Empty<float>();
+        public float[] Saturation = Array.Empty<float>();
+    }
+
+    /// <summary>Downscales the image onto a coarse grid and computes per-cell luminance
+    /// variance and mean colour saturation - shared by the text and logo detectors.</summary>
+    private static CellStats ComputeCellStats(SKImage image, int targetWidth)
+    {
+        const int cell = 5;
         var w = Math.Min(targetWidth, image.Width);
         var h = Math.Max(1, (int)Math.Round(image.Height * (w / (float)image.Width)));
         var info = new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Premul);
@@ -425,16 +595,16 @@ public class TemplateImportService : ITemplateImportService
             }
         }
 
-        const int cell = 5;
         var cols = w / cell;
         var rows = h / cell;
+        var stats = new CellStats { Width = w, Height = h, Cols = cols, Rows = rows };
         if (cols < 2 || rows < 2)
         {
-            return Array.Empty<ImportBox>();
+            return stats;
         }
 
-        var vars = new float[cols * rows];
-        var satAvgs = new float[cols * rows];
+        stats.Variance = new float[cols * rows];
+        stats.Saturation = new float[cols * rows];
         for (var cy = 0; cy < rows; cy++)
         {
             for (var cx = 0; cx < cols; cx++)
@@ -468,25 +638,166 @@ public class TemplateImportService : ITemplateImportService
                 var idx = cy * cols + cx;
                 mean /= n;
                 m2 /= n;
-                vars[idx] = m2 - mean * mean;
-                satAvgs[idx] = s / n;
+                stats.Variance[idx] = m2 - mean * mean;
+                stats.Saturation[idx] = s / n;
             }
         }
 
+        return stats;
+    }
+
+    /// <summary>
+    /// Text heuristic run at two scales (coarse catches large headings, fine catches
+    /// small lines): mark cells with high luminance variance and low colour saturation,
+    /// group adjacent cells into blocks, drop blocks overlapping a detected logo, then
+    /// merge overlapping boxes from both scales.
+    /// </summary>
+    private static IReadOnlyList<ImportBox> DetectTextBlocks(SKImage image, IReadOnlyList<ImportBox> logoBoxes)
+    {
+        var candidates = new List<ImportBox>();
+        candidates.AddRange(DetectTextBlocksAtScale(image, 96, logoBoxes));
+        candidates.AddRange(DetectTextBlocksAtScale(image, 192, logoBoxes));
+        return MergeBoxes(candidates);
+    }
+
+    private static IReadOnlyList<ImportBox> DetectTextBlocksAtScale(
+        SKImage image, int targetWidth, IReadOnlyList<ImportBox> logoBoxes)
+    {
+        const int cell = 5;
+        var s = ComputeCellStats(image, targetWidth);
+        if (s.Cols < 2 || s.Rows < 2)
+        {
+            return Array.Empty<ImportBox>();
+        }
+
+        var vars = s.Variance;
         var meanVar = vars.Average();
         var stdVar = (float)Math.Sqrt(vars.Average(v => (v - meanVar) * (v - meanVar)));
-        var threshold = meanVar + Math.Max(120f, stdVar * 1.1f);
+        var threshold = meanVar + Math.Max(70f, stdVar * 1.1f);
 
-        var marked = new bool[cols * rows];
-        for (var i = 0; i < cols * rows; i++)
+        var marked = new bool[s.Cols * s.Rows];
+        for (var i = 0; i < marked.Length; i++)
         {
-            if (vars[i] > threshold && satAvgs[i] < 105)
+            if (vars[i] > threshold && s.Saturation[i] < 125)
             {
                 marked[i] = true;
             }
         }
 
-        // Connected components -> bounding boxes (cell coordinates).
+        var result = new List<ImportBox>();
+        foreach (var group in GroupCells(marked, s.Cols, s.Rows))
+        {
+            var box = ToImportBox(group, cell, s.Width, s.Height, minArea: 0.006f, type: "erase");
+            if (box is not null && !logoBoxes.Any(l => OverlapRatio(box, l) > 0.4f))
+            {
+                result.Add(box);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>Greedy union of overlapping boxes (largest first) so multi-scale
+    /// detections of the same text block collapse into one region.</summary>
+    private static List<ImportBox> MergeBoxes(List<ImportBox> boxes)
+    {
+        var result = new List<ImportBox>();
+        foreach (var b in boxes.OrderByDescending(b => b.W * b.H))
+        {
+            ImportBox? hit = null;
+            foreach (var r in result)
+            {
+                if (OverlapRatio(r, b) > 0.3f || OverlapRatio(b, r) > 0.3f)
+                {
+                    hit = r;
+                    break;
+                }
+            }
+
+            if (hit is null)
+            {
+                result.Add(new ImportBox { Type = b.Type, X = b.X, Y = b.Y, W = b.W, H = b.H });
+            }
+            else
+            {
+                var x1 = MathF.Min(hit.X, b.X);
+                var y1 = MathF.Min(hit.Y, b.Y);
+                var x2 = MathF.Max(hit.X + hit.W, b.X + b.W);
+                var y2 = MathF.Max(hit.Y + hit.H, b.Y + b.H);
+                hit.X = Round3(x1);
+                hit.Y = Round3(y1);
+                hit.W = Round3(x2 - x1);
+                hit.H = Round3(y2 - y1);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Logo heuristic: logos are compact colourful artwork, so mark cells with high
+    /// colour saturation, group them, and keep only reasonably sized groups (a full-bleed
+    /// coloured background or a tiny speck is not a logo).
+    /// </summary>
+    private static IReadOnlyList<ImportBox> DetectLogoBlocks(SKImage image)
+    {
+        const int cell = 5;
+        const float saturationThreshold = 90f;
+        var s = ComputeCellStats(image, 96);
+        if (s.Cols < 2 || s.Rows < 2)
+        {
+            return Array.Empty<ImportBox>();
+        }
+
+        var marked = new bool[s.Cols * s.Rows];
+        for (var i = 0; i < marked.Length; i++)
+        {
+            if (s.Saturation[i] >= saturationThreshold)
+            {
+                marked[i] = true;
+            }
+        }
+
+        var result = new List<ImportBox>();
+        foreach (var group in GroupCells(marked, s.Cols, s.Rows))
+        {
+            var box = ToImportBox(group, cell, s.Width, s.Height, minArea: 0.004f, type: "erase-logo");
+            if (box is not null && box.W * box.H <= 0.30f)
+            {
+                result.Add(box);
+            }
+        }
+
+        return result;
+    }
+
+    private static ImportBox? ToImportBox(
+        (int MinX, int MinY, int MaxX, int MaxY) group, int cell, int w, int h, float minArea, string type)
+    {
+        var x0 = group.MinX * cell / (float)w;
+        var y0 = group.MinY * cell / (float)h;
+        var x1 = (group.MaxX + 1) * cell / (float)w;
+        var y1 = (group.MaxY + 1) * cell / (float)h;
+        var bw = x1 - x0;
+        var bh = y1 - y0;
+        if (bw * bh < minArea)
+        {
+            return null;
+        }
+
+        return new ImportBox
+        {
+            Type = type,
+            X = Round3(Math.Clamp(x0, 0, 0.99f)),
+            Y = Round3(Math.Clamp(y0, 0, 0.99f)),
+            W = Round3(Math.Clamp(bw, 0.02f, 1)),
+            H = Round3(Math.Clamp(bh, 0.02f, 1))
+        };
+    }
+
+    /// <summary>Flood-fills adjacent marked cells and returns their bounding boxes.</summary>
+    private static List<(int MinX, int MinY, int MaxX, int MaxY)> GroupCells(bool[] marked, int cols, int rows)
+    {
         var boxes = new List<(int MinX, int MinY, int MaxX, int MaxY)>();
         var visited = new bool[cols * rows];
         var stack = new Stack<int>();
@@ -542,27 +853,76 @@ public class TemplateImportService : ITemplateImportService
             }
         }
 
-        var result = new List<ImportBox>();
-        foreach (var b in boxes)
-        {
-            var x0 = b.MinX * cell / (float)w;
-            var y0 = b.MinY * cell / (float)h;
-            var x1 = (b.MaxX + 1) * cell / (float)w;
-            var y1 = (b.MaxY + 1) * cell / (float)h;
-            var bw = x1 - x0;
-            var bh = y1 - y0;
-            if (bw * bh < 0.006f)
-            {
-                continue;
-            }
+        return boxes;
+    }
 
-            result.Add(new ImportBox { Type = "erase", X = Round3(Math.Clamp(x0, 0, 0.99f)), Y = Round3(Math.Clamp(y0, 0, 0.99f)), W = Round3(Math.Clamp(bw, 0.02f, 1)), H = Round3(Math.Clamp(bh, 0.02f, 1)) });
-        }
-
-        return result;
+    /// <summary>Intersection area of two boxes divided by the first box's area.</summary>
+    private static float OverlapRatio(ImportBox a, ImportBox b)
+    {
+        var x1 = MathF.Max(a.X, b.X);
+        var y1 = MathF.Max(a.Y, b.Y);
+        var x2 = MathF.Min(a.X + a.W, b.X + b.W);
+        var y2 = MathF.Min(a.Y + a.H, b.Y + b.H);
+        var inter = MathF.Max(0f, x2 - x1) * MathF.Max(0f, y2 - y1);
+        return inter / MathF.Max(0.0001f, a.W * a.H);
     }
 
     // --------------------------------------------------------------- persistence
+
+    /// <summary>Stores the untouched upload so the layout can be re-edited later.</summary>
+    private async Task<string?> SaveOriginalAsync(int tenantId, byte[] bytes, string ext, CancellationToken ct)
+    {
+        var webRoot = _env.WebRootPath;
+        if (string.IsNullOrWhiteSpace(webRoot))
+        {
+            return null;
+        }
+
+        var dir = Path.Combine(webRoot, "templates", "imports", tenantId.ToString());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var fileName = $"orig_{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid().ToString("N")[..6]}{ext}";
+            var fullPath = Path.Combine(dir, fileName);
+            await File.WriteAllBytesAsync(fullPath, bytes, ct);
+            return $"/templates/imports/{tenantId}/{fileName}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to store the original upload; re-editing stays unavailable for this template.");
+            return null;
+        }
+    }
+
+    /// <summary>Deletes a replaced file under /templates/imports (never touches other paths).</summary>
+    private void DeleteImportedFile(string? relativePath, string? keepPath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) ||
+            string.Equals(relativePath, keepPath, StringComparison.OrdinalIgnoreCase) ||
+            !relativePath.StartsWith("/templates/imports/", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            var webRoot = _env.WebRootPath;
+            if (string.IsNullOrWhiteSpace(webRoot))
+            {
+                return;
+            }
+
+            var full = Path.Combine(webRoot, relativePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(full))
+            {
+                File.Delete(full);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete the replaced import file {Path}.", relativePath);
+        }
+    }
 
     private async Task<string?> SaveBackgroundAsync(int tenantId, SKImage image, string originalExt, CancellationToken ct)
     {
