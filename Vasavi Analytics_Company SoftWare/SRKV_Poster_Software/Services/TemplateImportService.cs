@@ -39,6 +39,12 @@ public interface ITemplateImportService
     Task<AiUpdateResult> ApplyInstructionAsync(IFormFile? file, string? instruction, CancellationToken ct = default);
 
     /// <summary>
+    /// Same chat-style update but applied to an existing imported template's stored poster,
+    /// persisting the new background, boxes and colour treatment on the template itself.
+    /// </summary>
+    Task<AiUpdateResult> ApplyInstructionToTemplateAsync(PosterTemplate template, string? instruction, CancellationToken ct = default);
+
+    /// <summary>
     /// Renders a small colour-treatment preview (no erasing) of an uploaded poster so
     /// the import wizard can show what each refresh option looks like before saving.
     /// </summary>
@@ -205,6 +211,7 @@ public class TemplateImportService : ITemplateImportService
                         BackgroundImagePath = savedPath,
                         OriginalBackgroundPath = originalPath,
                         ImportBoxesJson = validBoxes.Count > 0 ? JsonSerializer.Serialize(validBoxes) : null,
+                        TreatmentJson = refreshed.Kind == "original" ? null : JsonSerializer.Serialize(refreshed),
                         BackgroundDim = 30,
                         TextRegionsJson = BuildRegionsJson(validBoxes),
                         CreatedAt = DateTime.UtcNow,
@@ -330,6 +337,28 @@ public class TemplateImportService : ITemplateImportService
             {
                 _logger.LogError(ex, "Reprocessing box editing failed for template {TemplateId}; using the raw original.", template.Id);
                 layout = image;
+            }
+
+            // The colour refresh chosen at import (or via a later instruction) is baked
+            // into the background, so re-apply it after every re-edit from the raw original.
+            var storedTreatment = DeserializeTreatment(template.TreatmentJson);
+            if (storedTreatment is not null && storedTreatment.Kind != "original")
+            {
+                try
+                {
+                    var treated = ApplyTreatment(layout, storedTreatment);
+                    if (!ReferenceEquals(treated, layout))
+                    {
+                        using (layout)
+                        {
+                            layout = treated;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Re-applying the stored colour treatment failed for template {TemplateId}.", template.Id);
+                }
             }
 
             using (layout)
@@ -689,6 +718,148 @@ public class TemplateImportService : ITemplateImportService
                 return FreshBackground(image.Width, image.Height, t.FreshTheme ?? "colorful", t.FreshAccent);
             default:
                 return image;
+        }
+    }
+
+    /// <summary>Reads back a persisted treatment; null/invalid means "original colours".</summary>
+    public static PosterTreatmentRequest? DeserializeTreatment(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return NormalizeTreatment(JsonSerializer.Deserialize<PosterTreatmentRequest>(json));
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Chat-style update for an already-imported template: runs the instruction against
+    /// its stored original poster, bakes erasures plus any colour refresh into a new
+    /// background and updates the template in place. The untouched upload stays safe.
+    /// </summary>
+    public async Task<AiUpdateResult> ApplyInstructionToTemplateAsync(
+        PosterTemplate template, string? instruction, CancellationToken ct = default)
+    {
+        var sourceRelative = string.IsNullOrWhiteSpace(template?.OriginalBackgroundPath)
+            ? template?.BackgroundImagePath
+            : template.OriginalBackgroundPath;
+        if (template is null || string.IsNullOrWhiteSpace(sourceRelative))
+        {
+            return new AiUpdateResult(false, null, "This template has no poster image to update.", Array.Empty<ImportBox>(), new PosterTreatmentRequest("original"));
+        }
+
+        var webRoot = _env.WebRootPath;
+        if (string.IsNullOrWhiteSpace(webRoot))
+        {
+            return new AiUpdateResult(false, null, "Storage is not available.", Array.Empty<ImportBox>(), new PosterTreatmentRequest("original"));
+        }
+
+        var fullPath = Path.Combine(webRoot, sourceRelative.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(fullPath))
+        {
+            return new AiUpdateResult(false, null, "The poster image file is missing on disk.", Array.Empty<ImportBox>(), new PosterTreatmentRequest("original"));
+        }
+
+        SKImage? image;
+        try
+        {
+            image = SKImage.FromEncodedData(fullPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to decode stored poster of template {TemplateId}.", template.Id);
+            return new AiUpdateResult(false, null, "The poster image could not be read.", Array.Empty<ImportBox>(), new PosterTreatmentRequest("original"));
+        }
+
+        using (image)
+        {
+            var parsed = ParseInstruction(instruction ?? string.Empty);
+
+            // A pure erase instruction keeps whatever colour refresh the poster already has.
+            var effective = parsed.Treatment.Kind == "original"
+                ? (DeserializeTreatment(template.TreatmentJson) ?? parsed.Treatment)
+                : parsed.Treatment;
+
+            var boxes = new List<ImportBox>();
+            if (parsed.RemoveText)
+            {
+                boxes.AddRange(DetectTextBlocks(image, parsed.RemoveLogos ? DetectLogoBlocks(image) : new List<ImportBox>()));
+            }
+
+            if (parsed.RemoveLogos)
+            {
+                boxes.AddRange(DetectLogoBlocks(image));
+            }
+
+            var validBoxes = NormalizeBoxes(boxes);
+
+            SKImage working = image;
+            try
+            {
+                if (validBoxes.Count > 0)
+                {
+                    var edited = ApplyBoxEdits(image, validBoxes);
+                    if (!ReferenceEquals(edited, image))
+                    {
+                        working = edited;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Instruction erasing failed for template {TemplateId}.", template.Id);
+                working = image;
+                validBoxes = new List<ImportBox>();
+            }
+
+            using (working)
+            using (var final = ApplyTreatment(working, effective))
+            {
+                var savedPath = await SaveBackgroundAsync(template.TenantId, final, ".png", ct);
+                if (savedPath is null)
+                {
+                    return new AiUpdateResult(false, null, "Could not save the updated poster.", Array.Empty<ImportBox>(), effective);
+                }
+
+                var previousBg = template.BackgroundImagePath;
+                if (!string.Equals(previousBg, template.OriginalBackgroundPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    DeleteImportedFile(previousBg, savedPath);
+                }
+
+                template.BackgroundImagePath = savedPath;
+                template.TreatmentJson = effective.Kind == "original" ? null : JsonSerializer.Serialize(effective);
+                template.TextRegionsJson = BuildRegionsJson(validBoxes);
+                template.ImportBoxesJson = validBoxes.Count > 0 ? JsonSerializer.Serialize(validBoxes) : null;
+                template.UpdatedAt = DateTime.UtcNow;
+
+                const int previewWidth = 560;
+                var scale = Math.Min(1f, previewWidth / (float)Math.Max(1, final.Width));
+                var info = new SKImageInfo(
+                    (int)(final.Width * scale), (int)(final.Height * scale), SKColorType.Rgba8888, SKAlphaType.Premul);
+                using var small = SKSurface.Create(info);
+                byte[]? previewBytes = null;
+                if (small is not null)
+                {
+                    small.Canvas.DrawImage(final, new SKRect(0, 0, info.Width, info.Height), SKSamplingOptions.Default, null);
+                    using var snapshot = small.Snapshot();
+                    using var data = snapshot.Encode(SKEncodedImageFormat.Jpeg, 82);
+                    previewBytes = data?.ToArray();
+                }
+                else
+                {
+                    _logger.LogWarning("Instruction preview surface unavailable for template {TemplateId}.", template.Id);
+                }
+
+                return new AiUpdateResult(true, previewBytes, DescribeInstruction(parsed, validBoxes), validBoxes, effective);
+            }
         }
     }
 

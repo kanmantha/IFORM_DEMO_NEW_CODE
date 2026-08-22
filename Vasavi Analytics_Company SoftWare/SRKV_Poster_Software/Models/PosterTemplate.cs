@@ -42,6 +42,9 @@ public class PosterTemplate
     /// <summary>JSON array of import boxes (erase / erase-logo / keep) applied to the original upload.</summary>
     public string? ImportBoxesJson { get; set; }
 
+    /// <summary>JSON PosterTreatmentRequest baked into the current background; re-applied on re-edits.</summary>
+    public string? TreatmentJson { get; set; }
+
     /// <summary>Optional hex text colour used on top of the background image.</summary>
     [StringLength(20)]
     public string? TextColor { get; set; }

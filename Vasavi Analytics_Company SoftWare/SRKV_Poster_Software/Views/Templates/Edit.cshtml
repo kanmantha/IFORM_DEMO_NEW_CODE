@@ -105,6 +105,24 @@
 
 @if (canEditPoster)
 {
+    <div class="card mt-4 border-primary">
+        <div class="card-header bg-primary-subtle"><strong>🤖 Tell the assistant what to change</strong></div>
+        <div class="card-body">
+            <div class="row g-3 align-items-start">
+                <div class="col-lg-7">
+                    <textarea id="aiText" class="form-control mb-2" rows="2"
+                              placeholder='e.g. "remove all text and logos" or "make it black and white"'></textarea>
+                    <button type="button" class="btn btn-gradient" id="aiApply">Apply to this poster</button>
+                    <span class="form-text d-block mt-1">Applied instantly to the template — your original upload stays safe.</span>
+                </div>
+                <div class="col-lg-5 text-center">
+                    <img id="aiThumb" class="img-fluid border rounded d-none" style="max-height:200px;" alt="Updated preview" />
+                    <div id="aiMsg" class="alert d-none mt-2 mb-0 small py-2" role="alert"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="card mt-4">
         <div class="card-header"><strong>Edit the poster layout</strong></div>
         <div class="card-body">
@@ -461,17 +479,73 @@
                     }
                 } catch (e) { /* start clean */ }
 
-                const image = new Image();
-                image.onload = () => {
-                    img = image;
-                    const maxW = 520;
-                    canvas.width = Math.min(maxW, image.naturalWidth);
-                    canvas.height = Math.round(canvas.width * image.naturalHeight / image.naturalWidth);
-                    setTool('erase');
-                    renderBoxList();
-                    render();
-                };
-                image.src = @Json.Serialize(posterSource);
+                function loadPoster(src) {
+                    const image = new Image();
+                    image.onload = () => {
+                        img = image;
+                        const maxW = 520;
+                        canvas.width = Math.min(maxW, image.naturalWidth);
+                        canvas.height = Math.round(canvas.width * image.naturalHeight / image.naturalWidth);
+                        setTool('erase');
+                        boxes = [];
+                        savedBoxes = [];
+                        sync();
+                        render();
+                    };
+                    image.src = src;
+                }
+
+                loadPoster(@Json.Serialize(posterSource));
+
+                // ------------------------------------------------ AI assistant
+                const aiText = document.getElementById('aiText');
+                const aiApplyBtn = document.getElementById('aiApply');
+                const aiMsgEl = document.getElementById('aiMsg');
+                const aiThumbEl = document.getElementById('aiThumb');
+
+                aiApplyBtn.addEventListener('click', () => {
+                    const instruction = aiText.value.trim();
+                    if (!instruction) {
+                        alert('Type what you want changed, e.g. "remove all text and logos".');
+                        return;
+                    }
+                    aiApplyBtn.disabled = true;
+                    const oldLabel = aiApplyBtn.textContent;
+                    aiApplyBtn.textContent = 'Thinking…';
+                    const fd = new FormData();
+                    fd.append('__RequestVerificationToken', antiToken);
+                    fd.append('id', templateId);
+                    fd.append('instruction', instruction);
+
+                    fetch('/Templates/AiUpdateTemplate', { method: 'POST', body: fd })
+                        .then(r => r.json())
+                        .then(data => {
+                            aiMsgEl.classList.remove('d-none', 'alert-success', 'alert-warning');
+                            if (!data.ok) {
+                                aiMsgEl.classList.add('alert-warning');
+                                aiMsgEl.textContent = data.message || 'Could not apply that.';
+                                return;
+                            }
+                            aiMsgEl.classList.add('alert-success');
+                            aiMsgEl.textContent = data.message + ' Changes are saved.';
+                            if (data.image) {
+                                aiThumbEl.src = data.image;
+                                aiThumbEl.classList.remove('d-none');
+                            }
+                            if (data.backgroundUrl) {
+                                loadPoster(data.backgroundUrl);
+                            }
+                        })
+                        .catch(() => {
+                            aiMsgEl.classList.remove('d-none', 'alert-success');
+                            aiMsgEl.classList.add('alert-warning');
+                            aiMsgEl.textContent = 'Something went wrong applying that instruction.';
+                        })
+                        .finally(() => {
+                            aiApplyBtn.disabled = false;
+                            aiApplyBtn.textContent = oldLabel;
+                        });
+                });
             })();
         </script>
     }

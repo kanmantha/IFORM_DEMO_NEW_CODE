@@ -187,6 +187,45 @@ public class TemplatesController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AiUpdateTemplate(int id, string? instruction, CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var template = await db.PosterTemplates
+            .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == _tenant.TenantId && !t.IsSystem, ct);
+
+        if (template is null)
+        {
+            return Json(new { ok = false, message = "Template not found." });
+        }
+
+        var result = await _import.ApplyInstructionToTemplateAsync(template, instruction, ct);
+        if (!result.Success)
+        {
+            return Json(new { ok = false, message = result.Summary });
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        var thumbPath = await _thumbnails.EnsureThumbnailAsync(template, ct);
+        if (!string.IsNullOrWhiteSpace(thumbPath) && thumbPath != template.ThumbnailPath)
+        {
+            template.ThumbnailPath = thumbPath;
+            await db.SaveChangesAsync(ct);
+        }
+
+        return Json(new
+        {
+            ok = true,
+            message = result.Summary,
+            image = result.Image is null ? null : "data:image/jpeg;base64," + Convert.ToBase64String(result.Image),
+            backgroundUrl = template.BackgroundImagePath + "?v=" + DateTime.UtcNow.Ticks,
+            boxes = result.Boxes.Select(b => new { type = b.Type, x = b.X, y = b.Y, w = b.W, h = b.H }),
+            treatment = new { kind = result.Treatment.Kind }
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> PreviewTreatment(
         IFormFile? upload,
         string? kind,
