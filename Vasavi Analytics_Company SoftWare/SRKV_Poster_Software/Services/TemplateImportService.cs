@@ -836,6 +836,22 @@ public class TemplateImportService : ITemplateImportService
 
                 template.BackgroundImagePath = savedPath;
                 template.TreatmentJson = effective.Kind == "original" ? null : JsonSerializer.Serialize(effective);
+
+                // When this instruction changed the look, re-pick readable text/accent
+                // colours from the new artwork. Pure erase instructions keep any colours
+                // the user may have customised.
+                if (parsed.Treatment.Kind != "original")
+                {
+                    var (newAccent, newText) = AnalyzeColors(final);
+                    if (effective.Kind == "fresh" && HexColor.TryParse(effective.FreshAccent, out var chosenAccent))
+                    {
+                        newAccent = HexColor.ToHex(chosenAccent);
+                    }
+
+                    template.AccentColor = newAccent;
+                    template.TextColor = newText;
+                }
+
                 template.TextRegionsJson = BuildRegionsJson(validBoxes);
                 template.ImportBoxesJson = validBoxes.Count > 0 ? JsonSerializer.Serialize(validBoxes) : null;
                 template.UpdatedAt = DateTime.UtcNow;
