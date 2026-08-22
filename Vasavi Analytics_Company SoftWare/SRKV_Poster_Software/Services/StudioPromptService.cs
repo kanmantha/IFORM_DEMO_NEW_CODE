@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DailyPosterGenerator.Services;
 
-public sealed record StudioPlan(string Title, string Sector, string OccasionKey, string Prompt);
+public sealed record StudioPlan(string Title, string Sector, string OccasionKey, string Prompt, DateTime? SuggestedDate);
 
 public interface IStudioPromptService
 {
@@ -84,7 +84,7 @@ public class StudioPromptService : IStudioPromptService
 
         if (lowered.Length == 0)
         {
-            return new StudioPlan("Today's Special Highlight", SectorCatalog.Normalize(tenantSector), "generic", raw);
+            return new StudioPlan("Today's Special Highlight", SectorCatalog.Normalize(tenantSector), "generic", raw, null);
         }
 
         var occasionKey = "generic";
@@ -109,7 +109,107 @@ public class StudioPromptService : IStudioPromptService
             .FirstOrDefault()
             ?? SectorCatalog.Normalize(tenantSector);
 
-        return new StudioPlan(title, sector, occasionKey, raw);
+        DateTime? suggested = null;
+        if (OccasionDates.TryGetValue(occasionKey, out var resolver))
+        {
+            suggested = resolver(DateTime.Today);
+        }
+
+        return new StudioPlan(title, sector, occasionKey, raw, suggested);
+    }
+
+    // ------------------------------------------------------- occasion date hints
+
+    /// <summary>Suggests the next upcoming date for an occasion. Approximate for lunar festivals.</summary>
+    private static readonly Dictionary<string, Func<DateTime, DateTime?>> OccasionDates = new()
+    {
+        ["womens-day"] = Fixed(3, 8),
+        ["mothers-day"] = t => SecondSundayOfMay(t),
+        ["fathers-day"] = t => ThirdSundayOfJune(t),
+        ["teachers-day"] = Fixed(9, 5),
+        ["childrens-day"] = Fixed(11, 14),
+        ["christmas"] = Fixed(12, 25),
+        ["newyear"] = t => t.Date < new DateTime(t.Year, 1, 2) ? new DateTime(t.Year, 1, 1) : new DateTime(t.Year + 1, 1, 1),
+        ["independence"] = Fixed(8, 15),
+        ["republic"] = Fixed(1, 26),
+        ["yoga"] = Fixed(6, 21),
+        ["environment"] = Fixed(6, 5),
+        ["water"] = Fixed(3, 22),
+        ["health"] = Fixed(4, 7),
+        ["pongal"] = Fixed(1, 14),
+        ["diwali"] = Festival(new Dictionary<int, DateTime>
+        {
+            [2025] = new(2025, 10, 20), [2026] = new(2026, 11, 8), [2027] = new(2027, 11, 5),
+            [2028] = new(2028, 10, 25), [2029] = new(2029, 11, 12), [2030] = new(2030, 11, 1)
+        }),
+        ["holi"] = Festival(new Dictionary<int, DateTime>
+        {
+            [2025] = new(2025, 3, 14), [2026] = new(2026, 3, 4), [2027] = new(2027, 3, 23),
+            [2028] = new(2028, 3, 12), [2029] = new(2029, 3, 1), [2030] = new(2030, 3, 20)
+        }),
+        ["ganesh"] = Festival(new Dictionary<int, DateTime>
+        {
+            [2025] = new(2025, 8, 27), [2026] = new(2026, 9, 14), [2027] = new(2027, 9, 4),
+            [2028] = new(2028, 8, 24), [2029] = new(2029, 9, 12), [2030] = new(2030, 9, 1)
+        }),
+        ["navratri"] = Festival(new Dictionary<int, DateTime>
+        {
+            [2025] = new(2025, 9, 22), [2026] = new(2026, 10, 11), [2027] = new(2027, 10, 1),
+            [2028] = new(2028, 9, 20), [2029] = new(2029, 10, 9), [2030] = new(2030, 9, 29)
+        }),
+        ["eid"] = Festival(new Dictionary<int, DateTime>
+        {
+            [2025] = new(2025, 3, 31), [2026] = new(2026, 3, 20), [2027] = new(2027, 3, 10),
+            [2028] = new(2028, 2, 27), [2029] = new(2029, 2, 16), [2030] = new(2030, 2, 5)
+        })
+    };
+
+    private static Func<DateTime, DateTime?> Fixed(int month, int day) => today =>
+    {
+        var candidate = new DateTime(today.Year, month, day);
+        if (candidate.Date < today.Date)
+        {
+            candidate = candidate.AddYears(1);
+        }
+
+        return candidate;
+    };
+
+    private static Func<DateTime, DateTime?> Festival(Dictionary<int, DateTime> table) => today =>
+    {
+        if (table.TryGetValue(today.Year, out var thisYear) && thisYear.Date >= today.Date)
+        {
+            return thisYear;
+        }
+
+        for (var year = today.Year + 1; year <= today.Year + 6; year++)
+        {
+            if (table.TryGetValue(year, out var next))
+            {
+                return next;
+            }
+        }
+
+        return null;
+    };
+
+    private static DateTime SecondSundayOfMay(DateTime today)
+    {
+        var candidate = NthWeekday(today.Year, 5, DayOfWeek.Sunday, 2);
+        return candidate.Date < today.Date ? NthWeekday(today.Year + 1, 5, DayOfWeek.Sunday, 2) : candidate;
+    }
+
+    private static DateTime ThirdSundayOfJune(DateTime today)
+    {
+        var candidate = NthWeekday(today.Year, 6, DayOfWeek.Sunday, 3);
+        return candidate.Date < today.Date ? NthWeekday(today.Year + 1, 6, DayOfWeek.Sunday, 3) : candidate;
+    }
+
+    private static DateTime NthWeekday(int year, int month, DayOfWeek dow, int n)
+    {
+        var first = new DateTime(year, month, 1);
+        var offset = ((int)dow - (int)first.DayOfWeek + 7) % 7;
+        return first.AddDays(offset + (n - 1) * 7);
     }
 
     private static string ToTitle(string text)
@@ -149,7 +249,19 @@ public class StudioPromptService : IStudioPromptService
         ("light", "#C62828"),
         ("colorful", "#5C6BC0"),
         ("dark", "#EC407A"),
-        ("light", "#2E7D32")
+        ("light", "#2E7D32"),
+        ("colorful", "#FF6F00"),
+        ("dark", "#42A5F5"),
+        ("light", "#00695C"),
+        ("colorful", "#7E57C2"),
+        ("dark", "#9CCC65"),
+        ("light", "#D81B60"),
+        ("colorful", "#29B6F6"),
+        ("dark", "#FFA726"),
+        ("light", "#4527A0"),
+        ("colorful", "#66BB6A"),
+        ("dark", "#EF5350"),
+        ("light", "#00838F")
     };
 
     public async Task<PosterTemplate> CreateVariantAsync(StudioPlan plan, int round, int tenantId, CancellationToken ct = default)

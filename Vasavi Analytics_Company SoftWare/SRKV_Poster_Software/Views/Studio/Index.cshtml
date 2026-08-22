@@ -86,6 +86,7 @@
                 <div class="col-lg-5">
                     <h4 class="mb-1" id="studioTitle"></h4>
                     <div class="text-muted small mb-3" id="studioPromptEcho"></div>
+                    <div class="alert alert-light border small py-2 px-3" id="dateNote" style="display:none;"></div>
                     <div class="alert alert-light border small py-2 px-3" id="studioEvents" style="display:none;"></div>
                     <dl class="row mb-3">
                         <dt class="col-5 small fw-normal text-muted">Template</dt>
@@ -107,6 +108,7 @@
                             <input type="hidden" name="prompt" id="savePrompt" />
                             <input type="hidden" name="templateId" id="saveTemplateId" />
                             <input type="hidden" name="date" id="saveDate" />
+                            <input type="hidden" name="dateExplicit" id="saveDateExplicit" value="false" />
                             <button type="submit" class="btn btn-gradient">Save to Gallery ✓</button>
                         </form>
                     </div>
@@ -134,6 +136,8 @@
         const dateInput = document.getElementById('studioDate');
         const initialDate = '@(ViewBag.InitialDate as string ?? string.Empty)';
         dateInput.value = initialDate || new Date().toLocaleDateString('en-CA');
+        let dateTouched = initialDate !== '';
+        dateInput.addEventListener('change', () => { dateTouched = true; });
 
         let round = 0;
         let busy = false;
@@ -166,13 +170,26 @@
             chips.style.display = 'none';
 
             try {
-                const body = new URLSearchParams({ prompt, round: String(round), date: dateInput.value });
+                const body = new URLSearchParams({
+                    prompt, round: String(round), date: dateInput.value,
+                    dateExplicit: String(dateTouched)
+                });
                 body.append('__RequestVerificationToken', token);
                 const resp = await fetch('@Url.Action("Create", "Studio")', {
                     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body
                 });
                 const data = await resp.json();
                 if (!resp.ok || !data.ok) throw new Error(data.error || 'Failed');
+
+                if (data.dateAutoSet && data.eventDate) {
+                    dateInput.value = data.eventDate;
+                    dateTouched = true;
+                    document.getElementById('dateNote').textContent =
+                        '📅 Date set to ' + new Date(data.eventDate + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) + ' — matches the occasion.';
+                    document.getElementById('dateNote').style.display = 'block';
+                } else {
+                    document.getElementById('dateNote').style.display = 'none';
+                }
 
                 document.getElementById('studioTitle').textContent = data.title;
                 document.getElementById('studioPromptEcho').textContent = '"' + prompt + '"';
@@ -184,7 +201,8 @@
                 document.getElementById('studioImg').src = data.previewUrl + '?t=' + Date.now();
                 document.getElementById('savePrompt').value = prompt;
                 document.getElementById('saveTemplateId').value = data.templateId;
-                document.getElementById('saveDate').value = data.eventDate;
+                document.getElementById('saveDate').value = data.eventDate || dateInput.value;
+                document.getElementById('saveDateExplicit').value = String(dateTouched);
 
                 const eventsBox = document.getElementById('studioEvents');
                 if (data.eventCount > 0) {

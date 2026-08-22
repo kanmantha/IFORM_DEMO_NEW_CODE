@@ -51,7 +51,7 @@ public class StudioController : Controller
     /// </summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(string? prompt, int round = 1, DateTime? date = null, CancellationToken ct = default)
+    public async Task<IActionResult> Create(string? prompt, int round = 1, DateTime? date = null, bool dateExplicit = false, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(prompt))
         {
@@ -60,8 +60,15 @@ public class StudioController : Controller
 
         try
         {
-            var when = (date ?? DateTime.Today).Date;
             var plan = await BuildPlanAsync(prompt, ct);
+
+            // When the user has not chosen a date themselves, an occasion prompt
+            // (e.g. "Women's Day") steers the poster to that occasion's next date.
+            var when = dateExplicit || plan.SuggestedDate is null
+                ? (date ?? DateTime.Today).Date
+                : plan.SuggestedDate.Value.Date;
+            var dateAutoSet = !dateExplicit && plan.SuggestedDate is not null && when != (date ?? DateTime.Today).Date;
+
             var template = await _studio.CreateVariantAsync(plan, round, _tenant.TenantId, ct);
 
             var dayEvents = await _events.GetTodaysEventsAsync(when, ct);
@@ -90,6 +97,7 @@ public class StudioController : Controller
                 title = plan.Title,
                 previewUrl = previewPath,
                 eventDate = when.ToString("yyyy-MM-dd"),
+                dateAutoSet,
                 eventCount = dayEvents.Count,
                 featured = dayEvents.Take(3).Select(e => e.Text).ToList()
             });
@@ -104,7 +112,7 @@ public class StudioController : Controller
     /// <summary>Saves the approved design as a real poster in the gallery.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Save(string? prompt, int? templateId, DateTime? date = null, CancellationToken ct = default)
+    public async Task<IActionResult> Save(string? prompt, int? templateId, DateTime? date = null, bool dateExplicit = false, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(prompt) || templateId is null)
         {
@@ -112,8 +120,11 @@ public class StudioController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var when = (date ?? DateTime.Today).Date;
         var plan = await BuildPlanAsync(prompt, ct);
+        var when = dateExplicit || plan.SuggestedDate is null
+            ? (date ?? DateTime.Today).Date
+            : plan.SuggestedDate.Value.Date;
+
         var dayEvents = await _events.GetTodaysEventsAsync(when, ct);
 
         var allEvents = new List<EventItem> { new() { Text = plan.Title, Kind = "event" } };

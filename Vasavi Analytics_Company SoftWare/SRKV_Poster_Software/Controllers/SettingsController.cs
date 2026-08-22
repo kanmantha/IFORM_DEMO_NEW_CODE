@@ -1,6 +1,7 @@
 using DailyPosterGenerator.Data;
 using DailyPosterGenerator.Models;
 using DailyPosterGenerator.Services;
+using DailyPosterGenerator.Services.MultiTenancy;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,23 +11,37 @@ namespace DailyPosterGenerator.Controllers;
 [Authorize]
 public class SettingsController : Controller
 {
+    private static readonly string[] LogoExtensions = { ".png", ".jpg", ".jpeg", ".webp" };
+    private const long MaxLogoBytes = 2 * 1024 * 1024;
+
     private readonly IDbContextFactory<DailyPosterDbContext> _dbFactory;
     private readonly ISettingsService _settings;
     private readonly ITextGenerationService _text;
+    private readonly TenantContext _tenant;
+    private readonly IWebHostEnvironment _env;
 
     public SettingsController(
         IDbContextFactory<DailyPosterDbContext> dbFactory,
         ISettingsService settings,
-        ITextGenerationService text)
+        ITextGenerationService text,
+        TenantContext tenant,
+        IWebHostEnvironment env)
     {
         _dbFactory = dbFactory;
         _settings = settings;
         _text = text;
+        _tenant = tenant;
+        _env = env;
     }
 
     public async Task<IActionResult> Index(CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var tenantLogo = await db.Tenants.AsNoTracking()
+            .Where(t => t.Id == _tenant.TenantId)
+            .Select(t => t.LogoPath)
+            .FirstOrDefaultAsync(ct);
 
         var vm = new SettingsViewModel
         {
@@ -52,7 +67,103 @@ public class SettingsController : Controller
             Platforms = await db.Platforms.AsNoTracking().OrderBy(p => p.Name).ToListAsync(ct)
         };
 
+        ViewBag.TenantLogo = tenantLogo;
         return View(vm);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UploadLogo(IFormFile? logo, CancellationToken ct = default)
+    {
+        if (logo is null || logo.Length == 0)
+        {
+            TempData["Error"] = "Choose a logo file first.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (logo.Length > MaxLogoBytes)
+        {
+            TempData["Error"] = "Logo must be 2 MB or smaller.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var extension = Path.GetExtension(logo.FileName).ToLowerInvariant();
+        if (!LogoExtensions.Contains(extension))
+        {
+            TempData["Error"] = "Logo must be a PNG, JPG or WEBP image.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var wwwRoot = _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot");
+        var logoDir = Path.Combine(wwwRoot, "logos");
+        Directory.CreateDirectory(logoDir);
+
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == _tenant.TenantId, ct);
+        if (tenant is null)
+        {
+            TempData["Error"] = "Tenant not found.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // Delete the previous file so the logos folder never accumulates orphans.
+        if (!string.IsNullOrWhiteSpace(tenant.LogoPath))
+        {
+            DeleteLogoFile(wwwRoot, tenant.LogoPath);
+        }
+
+        var fileName = $"tenant_{tenant.Id}{extension}";
+        var fullPath = Path.Combine(logoDir, fileName);
+        await using (var stream = System.IO.File.Create(fullPath))
+        {
+            await logo.CopyToAsync(stream, ct);
+        }
+
+        tenant.LogoPath = "/logos/" + fileName;
+        await db.SaveChangesAsync(ct);
+
+        TempData["Success"] = "Logo uploaded — it will appear on newly generated posters.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveLogo(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == _tenant.TenantId, ct);
+        if (tenant is not null && !string.IsNullOrWhiteSpace(tenant.LogoPath))
+        {
+            var wwwRoot = _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot");
+            DeleteLogoFile(wwwRoot, tenant.LogoPath);
+            tenant.LogoPath = null;
+            await db.SaveChangesAsync(ct);
+        }
+
+        TempData["Success"] = "Logo removed.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    private static void DeleteLogoFile(string wwwRoot, string relativePath)
+    {
+        try
+        {
+            // Only ever delete inside wwwroot/logos.
+            if (!relativePath.StartsWith("/logos/", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var full = Path.Combine(wwwRoot, relativePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+            if (System.IO.File.Exists(full))
+            {
+                System.IO.File.Delete(full);
+            }
+        }
+        catch (IOException)
+        {
+            // Best effort; the DB row is already cleared.
+        }
     }
 
     [HttpPost]

@@ -85,6 +85,29 @@
             </div>
 
             <div class="card mb-4">
+                <div class="card-header fw-semibold">Business Logo</div>
+                <div class="card-body">
+                    @if (ViewBag.TenantLogo is string tenantLogo && !string.IsNullOrWhiteSpace(tenantLogo))
+                    {
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <img src="@tenantLogo" alt="Your logo" class="border rounded bg-light p-1"
+                                 style="max-height:72px; max-width:180px; object-fit:contain;" />
+                            <form asp-action="RemoveLogo" method="post">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                            </form>
+                        </div>
+                    }
+                    <form asp-action="UploadLogo" method="post" enctype="multipart/form-data" class="d-flex gap-2 align-items-center flex-wrap">
+                        @Html.AntiForgeryToken()
+                        <input type="file" name="logo" accept=".png,.jpg,.jpeg,.webp" class="form-control" style="max-width:320px;" required />
+                        <button type="submit" class="btn btn-gradient">Upload Logo</button>
+                    </form>
+                    <div class="form-text mt-2">PNG / JPG / WEBP up to 2 MB. Drawn top-right on newly generated posters.</div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
                 <div class="card-header fw-semibold">Poster Design</div>
                 <div class="card-body">
                     <label asp-for="PosterTheme" class="form-label">Theme</label>

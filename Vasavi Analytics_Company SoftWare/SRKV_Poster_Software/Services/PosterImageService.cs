@@ -2,7 +2,9 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using DailyPosterGenerator.Data;
 using DailyPosterGenerator.Models;
+using Microsoft.EntityFrameworkCore;
 using SkiaSharp;
 
 namespace DailyPosterGenerator.Services;
@@ -24,6 +26,7 @@ public class SkiaSharpPosterImageService : IPosterImageService
     private readonly IWebHostEnvironment _env;
     private readonly ISettingsService _settings;
     private readonly IHttpClientFactory _httpFactory;
+    private readonly IDbContextFactory<DailyPosterDbContext> _dbFactory;
     private readonly ILogger<SkiaSharpPosterImageService> _logger;
 
     private const int Width = 1080;
@@ -35,11 +38,13 @@ public class SkiaSharpPosterImageService : IPosterImageService
         IWebHostEnvironment env,
         ISettingsService settings,
         IHttpClientFactory httpFactory,
+        IDbContextFactory<DailyPosterDbContext> dbFactory,
         ILogger<SkiaSharpPosterImageService> logger)
     {
         _env = env;
         _settings = settings;
         _httpFactory = httpFactory;
+        _dbFactory = dbFactory;
         _logger = logger;
     }
 
@@ -117,6 +122,14 @@ public class SkiaSharpPosterImageService : IPosterImageService
             if (!theme.IsSrv)
             {
                 DrawContent(canvas, poster, theme, brand, hero);
+                var logo = await LoadTenantLogoAsync(poster.TenantId, ct);
+                if (logo is not null)
+                {
+                    using (logo)
+                    {
+                        DrawTenantLogo(canvas, logo);
+                    }
+                }
             }
 
             hero?.Dispose();
@@ -1574,6 +1587,62 @@ public class SkiaSharpPosterImageService : IPosterImageService
     }
 
     // ---------------------------------------------------------------- save
+
+    /// <summary>Loads the tenant's uploaded logo (if any) for overlay onto generated posters.</summary>
+    private async Task<SKBitmap?> LoadTenantLogoAsync(int tenantId, CancellationToken ct)
+    {
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+            var relative = await db.Tenants.AsNoTracking()
+                .Where(t => t.Id == tenantId)
+                .Select(t => t.LogoPath)
+                .FirstOrDefaultAsync(ct);
+
+            if (string.IsNullOrWhiteSpace(relative))
+            {
+                return null;
+            }
+
+            var wwwRoot = _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot");
+            var full = Path.Combine(wwwRoot, relative.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(full))
+            {
+                return null;
+            }
+
+            await using var stream = File.OpenRead(full);
+            return SKBitmap.Decode(stream);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load logo for tenant {TenantId}.", tenantId);
+            return null;
+        }
+    }
+
+    private static void DrawTenantLogo(SKCanvas canvas, SKBitmap logo)
+    {
+        const float pad = 40f;
+        const float targetHeight = 110f;
+
+        var scale = targetHeight / logo.Height;
+        var scaledWidth = logo.Width * scale;
+
+        var dest = new SKRect(Width - pad - scaledWidth, pad, Width - pad, pad + targetHeight);
+
+        // Soft white backing keeps dark logos readable on dark posters.
+        using var backing = new SKPaint
+        {
+            IsAntialias = true,
+            Color = new SKColor(255, 255, 255, 200)
+        };
+        canvas.DrawRoundRect(
+            dest.Left - 10, dest.Top - 10, dest.Width + 20, dest.Height + 20, 14, 14, backing);
+
+        using var paint = new SKPaint { IsAntialias = true };
+        canvas.DrawBitmap(logo, dest, paint);
+    }
 
     /// <summary>Previews are throwaway render caches; delete ones older than 24h. Best effort.</summary>
     private static void CleanupOldPreviews(string previewDir)
