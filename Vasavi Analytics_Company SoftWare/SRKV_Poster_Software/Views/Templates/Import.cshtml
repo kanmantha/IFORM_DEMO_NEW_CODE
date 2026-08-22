@@ -1,108 +1,217 @@
 @model TemplateImportViewModel
 @{
-    ViewData["Title"] = "Import Poster Template";
+    ViewData["Title"] = "Create or Update a Poster";
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h1 class="mb-1">Import a Poster Template</h1>
+        <h1 class="mb-1">Create or Update a Poster</h1>
         <p class="text-muted mb-0">
-            Upload an old poster, erase the old text and unwanted logos, protect the
-            logos you want to keep, and we'll turn it into a template. Today's matter
-            is then rendered into the erased text areas automatically.
+            Upload an old design and tell the assistant what to change — it removes text,
+            drops unwanted logos and refreshes the colours. Your original upload is always kept safe.
         </p>
     </div>
     <a asp-action="Index" class="btn btn-outline-secondary">Back</a>
 </div>
+
+<ul class="nav nav-tabs mb-4" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="tab-update-btn" data-bs-toggle="tab" data-bs-target="#tab-update"
+                type="button" role="tab" aria-selected="true">
+            🖼️ Update an old poster
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-new-btn" data-bs-toggle="tab" data-bs-target="#tab-new"
+                type="button" role="tab" aria-selected="false">
+            ✨ Create a new poster
+        </button>
+    </li>
+</ul>
 
 @if (!ViewData.ModelState.IsValid)
 {
     <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
 }
 
-<form asp-action="Import" method="post" enctype="multipart/form-data" id="importForm">
-    @Html.AntiForgeryToken()
-    <input type="hidden" asp-for="BoxesJson" />
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="tab-update" role="tabpanel">
+        <form asp-action="Import" method="post" enctype="multipart/form-data" id="importForm">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="BoxesJson" />
 
-    <div class="row g-4">
-        <div class="col-lg-5">
-            <div class="card">
-                <div class="card-header"><strong>1 · Details</strong></div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label asp-for="Name" class="form-label"></label>
-                        <input asp-for="Name" class="form-control" placeholder="e.g. Weekend Menu Board" />
-                        <span asp-validation-for="Name" class="text-danger"></span>
+            <div class="row g-4">
+                <div class="col-lg-5">
+                    <div class="card">
+                        <div class="card-header"><strong>1 · Details &amp; upload</strong></div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label asp-for="Name" class="form-label"></label>
+                                <input asp-for="Name" class="form-control" placeholder="e.g. Weekend Menu Board" />
+                                <span asp-validation-for="Name" class="text-danger"></span>
+                            </div>
+                            <div class="mb-3">
+                                <label asp-for="Sector" class="form-label"></label>
+                                <select asp-for="Sector" class="form-select">
+                                    @foreach (var s in Model.SectorOptions)
+                                    {
+                                        <option value="@s.Value">@s.Label</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label asp-for="Upload" class="form-label"></label>
+                                <input asp-for="Upload" type="file" id="fileInput" accept=".png,.jpg,.jpeg,.webp" class="form-control" />
+                                <div class="form-text">PNG, JPG or WEBP, up to 10 MB. A portrait poster works best.</div>
+                                <span asp-validation-for="Upload" class="text-danger"></span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label asp-for="Sector" class="form-label"></label>
-                        <select asp-for="Sector" class="form-select">
-                            @foreach (var s in Model.SectorOptions)
-                            {
-                                <option value="@s.Value">@s.Label</option>
-                            }
-                        </select>
+
+                    <div class="card mt-3 border-primary">
+                        <div class="card-header bg-primary-subtle"><strong>🤖 Tell the assistant what to change</strong></div>
+                        <div class="card-body">
+                            <textarea id="aiText" class="form-control mb-2" rows="3"
+                                      placeholder='e.g. "remove all text and logos, make it blue"'></textarea>
+                            <div class="d-flex flex-wrap gap-1 mb-2" id="aiChips">
+                                <button type="button" class="btn btn-sm btn-outline-secondary">remove all text</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary">remove text and logos</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary">make it black and white</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary">make it green</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary">new background</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary">enhance the colours</button>
+                            </div>
+                            <button type="button" class="btn btn-gradient w-100" id="aiApply">Apply instruction</button>
+                            <div id="aiMsg" class="alert d-none mt-2 mb-0 small py-2" role="alert"></div>
+                            <div id="aiResultWrap" class="d-none mt-2 text-center">
+                                <img id="aiThumb" class="img-fluid border rounded" style="max-height:260px;" alt="Updated preview" />
+                                <div class="form-text">Preview of your updated poster — erasures are marked on the editor.</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label asp-for="Description" class="form-label"></label>
-                        <textarea asp-for="Description" class="form-control" rows="2"
-                                  placeholder="What's this layout for?"></textarea>
-                        <span asp-validation-for="Description" class="text-danger"></span>
+
+                    <div class="card mt-3">
+                        <div class="card-header"><strong>2 · Mark the layout (optional)</strong></div>
+                        <div class="card-body">
+                            <p class="small text-muted mb-2" id="toolHint">
+                                The assistant above usually handles erasing. Prefer manual control?
+                                Click <strong>Erase Text</strong> or <strong>Erase Logos</strong> to auto-detect
+                                areas, or drag on the poster to mark one yourself.
+                            </p>
+                            <div class="btn-group w-100 mb-2" role="group" aria-label="Tool">
+                                <button type="button" class="btn btn-outline-danger active" id="toolErase">Erase Text</button>
+                                <button type="button" class="btn btn-outline-warning" id="toolLogos">Erase Logos</button>
+                                <button type="button" class="btn btn-outline-success" id="toolKeep">Keep Logo</button>
+                            </div>
+                            <div class="d-flex gap-2 mb-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnClear">Clear all</button>
+                            </div>
+                            <div id="boxList" class="d-flex flex-column gap-1"></div>
+                            <div id="boxCount" class="small text-muted mt-2">No areas marked yet.</div>
+                        </div>
                     </div>
-                    <div class="mb-1">
-                        <label asp-for="Upload" class="form-label"></label>
-                        <input asp-for="Upload" type="file" id="fileInput" accept=".png,.jpg,.jpeg,.webp" class="form-control" />
-                        <div class="form-text">PNG, JPG or WEBP, up to 10 MB. A portrait poster works best.</div>
-                        <span asp-validation-for="Upload" class="text-danger"></span>
+
+                    <div class="card mt-3">
+                        <div class="card-header"><strong>3 · Refresh colours</strong></div>
+                        <div class="card-body">
+                            <div class="form-check">
+                                <input class="form-check-input treat-radio" type="radio" name="TreatmentKind" id="treatOriginal" value="original" checked />
+                                <label class="form-check-label" for="treatOriginal">Keep original colours</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input treat-radio" type="radio" name="TreatmentKind" id="treatTint" value="tint" />
+                                <label class="form-check-label" for="treatTint">Colour tint wash</label>
+                            </div>
+                            <div class="ms-4 mb-2 d-none" id="tintControls">
+                                <input type="color" class="form-control form-control-color d-inline-block align-middle me-2"
+                                       id="tintHex" name="TintHex" value="#1e88e5" title="Tint colour" />
+                                <input type="range" class="form-range d-inline-block align-middle" style="max-width:180px;"
+                                       id="tintStrengthRange" min="10" max="85" value="45" />
+                                <span class="small text-muted align-middle" id="tintStrengthLabel">45%</span>
+                                <input type="hidden" id="TintStrength" name="TintStrength" value="0.45" />
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input treat-radio" type="radio" name="TreatmentKind" id="treatEnhance" value="enhance" />
+                                <label class="form-check-label" for="treatEnhance">Enhance colours (fix faded prints)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input treat-radio" type="radio" name="TreatmentKind" id="treatGray" value="grayscale" />
+                                <label class="form-check-label" for="treatGray">Black &amp; white</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input treat-radio" type="radio" name="TreatmentKind" id="treatFresh" value="fresh" />
+                                <label class="form-check-label" for="treatFresh">Fresh new background</label>
+                            </div>
+                            <div class="ms-4 mt-1 d-none" id="freshControls">
+                                <select class="form-select form-select-sm d-inline-block w-auto me-2" id="freshTheme" name="FreshTheme">
+                                    <option value="colorful">Colourful gradient</option>
+                                    <option value="light">Light &amp; clean</option>
+                                    <option value="dark">Dark premium</option>
+                                </select>
+                                <input type="color" class="form-control form-control-color d-inline-block align-middle"
+                                       id="freshAccent" name="FreshAccent" value="#ffd54f" title="Accent glow" />
+                            </div>
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="btnTreatPreview">See colour preview</button>
+                                <span class="small text-muted d-none" id="treatNote">Final import applies erasures + colour at full quality.</span>
+                            </div>
+                            <div class="mt-2 d-none" id="treatThumbWrap">
+                                <img id="treatThumb" class="img-fluid border rounded" style="max-height:220px;" alt="Colour preview" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="my-3 d-flex gap-2">
+                        <button type="submit" class="btn btn-gradient">Create Updated Template</button>
+                        <a asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </div>
+
+                <div class="col-lg-7">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <strong>Your poster</strong>
+                            <span class="small text-muted">Tool: <span id="toolLabel" class="text-danger">Erase Text</span></span>
+                        </div>
+                        <div class="card-body text-center">
+                            <div id="canvasWrap" class="d-none mx-auto" style="max-width:420px;">
+                                <canvas id="editCanvas" class="img-fluid border rounded" style="max-width:100%; cursor:crosshair;"></canvas>
+                            </div>
+                            <div id="emptyHint" class="text-muted py-5">
+                                Choose a poster image above to start updating it.
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
+        </form>
+    </div>
 
-            <div class="card mt-3">
-                <div class="card-header"><strong>2 · Mark the layout</strong></div>
-                <div class="card-body">
-                    <p class="small text-muted mb-2" id="toolHint">
-                        Click <strong>Erase Text</strong> or <strong>Erase Logos</strong> to
-                        auto-detect areas — you confirm each one before anything is removed.
-                        Dragging on the poster marks an area manually.
-                    </p>
-                    <div class="btn-group w-100 mb-2" role="group" aria-label="Tool">
-                        <button type="button" class="btn btn-outline-danger active" id="toolErase">Erase Text</button>
-                        <button type="button" class="btn btn-outline-warning" id="toolLogos">Erase Logos</button>
-                        <button type="button" class="btn btn-outline-success" id="toolKeep">Keep Logo</button>
-                    </div>
-                    <div class="d-flex gap-2 mb-2">
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnClear">Clear all</button>
-                    </div>
-                    <div id="boxList" class="d-flex flex-column gap-1"></div>
-                    <div id="boxCount" class="small text-muted mt-2">No areas marked yet.</div>
-                </div>
-            </div>
-
-            <div class="mt-3 d-flex gap-2">
-                <button type="submit" class="btn btn-gradient">Create Template</button>
-                <a asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
-            </div>
-        </div>
-
-        <div class="col-lg-7">
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <strong>Your poster</strong>
-                    <span class="small text-muted">Tool: <span id="toolLabel" class="text-danger">Erase Text</span></span>
-                </div>
-                <div class="card-body text-center">
-                    <div id="canvasWrap" class="d-none mx-auto" style="max-width:420px;">
-                        <canvas id="editCanvas" class="img-fluid border rounded" style="max-width:100%; cursor:crosshair;"></canvas>
-                    </div>
-                    <div id="emptyHint" class="text-muted py-5">
-                        Choose a poster image above to start marking it.
+    <div class="tab-pane fade" id="tab-new" role="tabpanel">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card text-center shadow-sm">
+                    <div class="card-body p-5">
+                        <div style="font-size:2.6rem;">✨</div>
+                        <h3 class="mb-2">Generate a fresh poster with AI</h3>
+                        <p class="text-muted mb-4">
+                            Describe the occasion in the Poster Studio — a festival, a sale, an event —
+                            pick a date from the calendar and get ready-to-share designs instantly.
+                        </p>
+                        <a href="/Studio" class="btn btn-gradient btn-lg px-4">Open Poster Studio</a>
+                        <hr class="my-4" />
+                        <div class="d-flex flex-wrap justify-content-center gap-2">
+                            <a class="btn btn-sm btn-outline-secondary" href="/Studio?prompt=Diwali%20greetings%20for%20my%20customers">🪔 Diwali</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="/Studio?prompt=Independence%20Day%20celebration">🇮🇳 Independence Day</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="/Studio?prompt=Mega%20sale%20announcement">🏷️ Mega Sale</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="/Studio?prompt=School%20annual%20day%20function">🏫 School Event</a>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-</form>
+</div>
 
 <div class="modal fade" id="detectModal" tabindex="-1" aria-labelledby="detectTitle" aria-hidden="true">
     <div class="modal-dialog">
@@ -142,18 +251,9 @@
             const toolLabel = document.getElementById('toolLabel');
 
             const TOOLS = {
-                'erase': {
-                    label: 'Erase Text', color: '#dc3545', cls: 'danger',
-                    hint: 'Click <strong>Erase Text</strong> to auto-detect old text areas - you confirm each one before anything is removed. Dragging marks an area manually.'
-                },
-                'erase-logo': {
-                    label: 'Erase Logos', color: '#fd7e14', cls: 'warning',
-                    hint: 'Click <strong>Erase Logos</strong> to auto-detect logos - you confirm each one before removal. Dragging marks an area manually.'
-                },
-                'keep': {
-                    label: 'Keep Logo', color: '#198754', cls: 'success',
-                    hint: 'Drag on the poster to protect a logo. Kept areas are never erased by any tool.'
-                }
+                'erase': { label: 'Erase Text', color: '#dc3545', cls: 'danger' },
+                'erase-logo': { label: 'Erase Logos', color: '#fd7e14', cls: 'warning' },
+                'keep': { label: 'Keep Logo', color: '#198754', cls: 'success' }
             };
             const TOOL_IDS = { 'erase': toolErase, 'erase-logo': toolLogos, 'keep': toolKeep };
 
@@ -171,7 +271,6 @@
                 Object.keys(TOOL_IDS).forEach(k => TOOL_IDS[k].classList.toggle('active', k === t));
                 toolLabel.textContent = TOOLS[t].label;
                 toolLabel.className = 'text-' + TOOLS[t].cls;
-                document.getElementById('toolHint').innerHTML = TOOLS[t].hint;
             }
 
             toolErase.addEventListener('click', () => { setTool('erase'); detectAndConfirm('text'); });
@@ -313,7 +412,7 @@
                 sync();
             });
 
-            fileInput.addEventListener('change', () => {
+            function loadImage() {
                 const file = fileInput.files && fileInput.files[0];
                 if (!file) return;
                 const reader = new FileReader();
@@ -326,14 +425,13 @@
                         canvas.height = Math.round(canvas.width * image.naturalHeight / image.naturalWidth);
                         canvasWrap.classList.remove('d-none');
                         emptyHint.style.display = 'none';
-                        boxes = [];
-                        pending = [];
                         sync();
                     };
                     image.src = e.target.result;
                 };
                 reader.readAsDataURL(file);
-            });
+            }
+            fileInput.addEventListener('change', loadImage);
 
             document.getElementById('btnClear').addEventListener('click', () => {
                 boxes = [];
@@ -441,6 +539,149 @@
                 pending = [];
                 render();
             });
+
+            // ------------------------------------------------ AI assistant
+
+            const aiText = document.getElementById('aiText');
+            const aiApply = document.getElementById('aiApply');
+            const aiMsg = document.getElementById('aiMsg');
+            const aiThumb = document.getElementById('aiThumb');
+            const aiResultWrap = document.getElementById('aiResultWrap');
+
+            document.querySelectorAll('#aiChips button').forEach(chip => {
+                chip.addEventListener('click', () => { aiText.value = chip.textContent.trim(); aiApply.click(); });
+            });
+
+            function token() {
+                return document.querySelector('input[name="__RequestVerificationToken"]').value;
+            }
+
+            function showAiMsg(text, ok) {
+                aiMsg.classList.remove('d-none', 'alert-success', 'alert-warning');
+                aiMsg.classList.add(ok ? 'alert-success' : 'alert-warning');
+                aiMsg.textContent = text;
+            }
+
+            aiApply.addEventListener('click', () => {
+                const file = fileInput.files && fileInput.files[0];
+                const instruction = aiText.value.trim();
+                if (!file) { showAiMsg('Choose a poster image first.', false); return; }
+                if (!instruction) { showAiMsg('Type what you want changed, e.g. "remove all text and make it blue".', false); return; }
+
+                aiApply.disabled = true;
+                const oldLabel = aiApply.textContent;
+                aiApply.textContent = 'Thinking…';
+                const fd = new FormData();
+                fd.append('__RequestVerificationToken', token());
+                fd.append('upload', file);
+                fd.append('instruction', instruction);
+
+                fetch('/Templates/AiUpdate', { method: 'POST', body: fd })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data.ok) { showAiMsg(data.message || 'Could not apply that.', false); return; }
+                        showAiMsg(data.message, true);
+                        if (data.image) {
+                            aiThumb.src = data.image;
+                            aiResultWrap.classList.remove('d-none');
+                        }
+                        boxes = (data.boxes || []).map(b => ({ type: b.type, x: b.x, y: b.y, w: b.w, h: b.h }));
+                        if (data.treatment) setTreatment(data.treatment);
+                        invalidateTreatPreview();
+                        sync();
+                    })
+                    .catch(() => showAiMsg('Something went wrong applying that instruction.', false))
+                    .finally(() => {
+                        aiApply.disabled = false;
+                        aiApply.textContent = oldLabel;
+                    });
+            });
+
+            // ------------------------------------------------ colour treatments
+
+            const tintControls = document.getElementById('tintControls');
+            const freshControls = document.getElementById('freshControls');
+            const tintHex = document.getElementById('tintHex');
+            const tintRange = document.getElementById('tintStrengthRange');
+            const tintLabel = document.getElementById('tintStrengthLabel');
+            const tintHidden = document.getElementById('TintStrength');
+            const freshThemeSel = document.getElementById('freshTheme');
+            const freshAccent = document.getElementById('freshAccent');
+
+            function currentKind() {
+                const el = document.querySelector('input[name="TreatmentKind"]:checked');
+                return el ? el.value : 'original';
+            }
+
+            function updateTreatmentControls() {
+                const kind = currentKind();
+                tintControls.classList.toggle('d-none', kind !== 'tint');
+                freshControls.classList.toggle('d-none', kind !== 'fresh');
+                tintLabel.textContent = tintRange.value + '%';
+                tintHidden.value = (parseInt(tintRange.value, 10) / 100).toFixed(2);
+            }
+
+            function setTreatment(t) {
+                const kind = t.kind || 'original';
+                document.querySelectorAll('.treat-radio').forEach(r => { r.checked = r.value === kind; });
+                if (t.tintHex) tintHex.value = t.tintHex;
+                if (typeof t.tintStrength === 'number') tintRange.value = Math.round(t.tintStrength * 100);
+                if (t.freshTheme) freshThemeSel.value = t.freshTheme;
+                if (t.freshAccent) freshAccent.value = t.freshAccent;
+                updateTreatmentControls();
+            }
+
+            document.querySelectorAll('.treat-radio').forEach(r =>
+                r.addEventListener('change', () => { updateTreatmentControls(); invalidateTreatPreview(); }));
+            [tintHex, tintRange, freshThemeSel, freshAccent].forEach(el =>
+                el.addEventListener('input', () => { updateTreatmentControls(); invalidateTreatPreview(); }));
+
+            const btnTreatPreview = document.getElementById('btnTreatPreview');
+            const treatThumb = document.getElementById('treatThumb');
+            const treatThumbWrap = document.getElementById('treatThumbWrap');
+            const treatNote = document.getElementById('treatNote');
+            let treatUrl = '';
+
+            function invalidateTreatPreview() {
+                if (treatUrl) { URL.revokeObjectURL(treatUrl); treatUrl = ''; }
+                treatThumbWrap.classList.add('d-none');
+                treatNote.classList.add('d-none');
+            }
+
+            btnTreatPreview.addEventListener('click', () => {
+                const file = fileInput.files && fileInput.files[0];
+                if (!file) { alert('Choose a poster image first.'); return; }
+                const fd = new FormData();
+                fd.append('__RequestVerificationToken', token());
+                fd.append('upload', file);
+                const t = {
+                    kind: currentKind(),
+                    tintHex: tintHex.value,
+                    strength: (parseInt(tintRange.value, 10) / 100).toFixed(2),
+                    freshTheme: freshThemeSel.value,
+                    freshAccent: freshAccent.value
+                };
+                fd.append('kind', t.kind);
+                fd.append('tintHex', t.tintHex);
+                fd.append('strength', t.strength);
+                fd.append('freshTheme', t.freshTheme);
+                fd.append('freshAccent', t.freshAccent);
+
+                btnTreatPreview.disabled = true;
+                fetch('/Templates/PreviewTreatment', { method: 'POST', body: fd })
+                    .then(r => { if (!r.ok) throw new Error('preview failed'); return r.blob(); })
+                    .then(blob => {
+                        if (treatUrl) URL.revokeObjectURL(treatUrl);
+                        treatUrl = URL.createObjectURL(blob);
+                        treatThumb.src = treatUrl;
+                        treatThumbWrap.classList.remove('d-none');
+                        treatNote.classList.remove('d-none');
+                    })
+                    .catch(() => alert('Could not build the preview.'))
+                    .finally(() => { btnTreatPreview.disabled = false; });
+            });
+
+            updateTreatmentControls();
         })();
     </script>
 }

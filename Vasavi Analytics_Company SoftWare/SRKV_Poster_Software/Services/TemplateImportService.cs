@@ -14,13 +14,12 @@ public interface ITemplateImportService
         string sector,
         IFormFile file,
         IReadOnlyList<ImportBox>? boxes = null,
+        PosterTreatmentRequest? treatment = null,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Heuristically locates likely text blocks and logo areas in an uploaded poster so
+    /// <summary>Heuristically locates likely text blocks and logo areas in an uploaded poster so
     /// the import editor can offer one-click erasing. Text detection skips colourful
-    /// regions (logos) and logo detection skips low-saturation text.
-    /// </summary>
+    /// regions (logos) and logo detection skips low-saturation text.</summary>
     Task<DetectionResult> DetectRegionsAsync(IFormFile file, CancellationToken ct = default);
 
     /// <summary>Same detection as <see cref="DetectRegionsAsync"/> but on a stored image under wwwroot.</summary>
@@ -31,12 +30,48 @@ public interface ITemplateImportService
     /// upload and replaces its processed background, text regions and box history.
     /// </summary>
     Task<TemplateImportResult> ReprocessAsync(PosterTemplate template, IReadOnlyList<ImportBox>? boxes, CancellationToken ct = default);
+
+    /// <summary>
+    /// Chat-style update: reads a plain-language instruction ("remove all text and
+    /// logos, make it blue"), figures out what to erase and which colour refresh to
+    /// apply, renders a small preview of the result and reports what it understood.
+    /// </summary>
+    Task<AiUpdateResult> ApplyInstructionAsync(IFormFile? file, string? instruction, CancellationToken ct = default);
+
+    /// <summary>
+    /// Renders a small colour-treatment preview (no erasing) of an uploaded poster so
+    /// the import wizard can show what each refresh option looks like before saving.
+    /// </summary>
+    Task<byte[]?> RenderTreatmentPreviewAsync(IFormFile? file, PosterTreatmentRequest? treatment, CancellationToken ct = default);
 }
 
 public record TemplateImportResult(bool Success, PosterTemplate? Template, string? Error);
 
 /// <summary>Auto-detected regions of an uploaded poster, normalized 0..1.</summary>
 public record DetectionResult(IReadOnlyList<ImportBox> TextBoxes, IReadOnlyList<ImportBox> LogoBoxes);
+
+/// <summary>
+/// Colour refresh chosen in the import wizard: keep the original look, wash it with one
+/// brand colour, boost faded colours, convert to black &amp; white, or discard the old art
+/// for a fresh themed gradient background.
+/// </summary>
+public record PosterTreatmentRequest(
+    string Kind,
+    string? TintHex = null,
+    float TintStrength = 0.4f,
+    string? FreshTheme = null,
+    string? FreshAccent = null);
+
+/// <summary>Parsed outcome of one chat instruction.</summary>
+public sealed record ParsedInstruction(bool RemoveText, bool RemoveLogos, PosterTreatmentRequest Treatment);
+
+/// <summary>Result of applying one chat instruction to an uploaded poster.</summary>
+public sealed record AiUpdateResult(
+    bool Success,
+    byte[]? Image,
+    string Summary,
+    IReadOnlyList<ImportBox> Boxes,
+    PosterTreatmentRequest Treatment);
 
 /// <summary>
 /// Turns an uploaded poster image into a reusable PosterTemplate: the image becomes
@@ -66,6 +101,7 @@ public class TemplateImportService : ITemplateImportService
         string sector,
         IFormFile file,
         IReadOnlyList<ImportBox>? boxes = null,
+        PosterTreatmentRequest? treatment = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -125,32 +161,58 @@ public class TemplateImportService : ITemplateImportService
 
             using (layout)
             {
-                var (accent, textColor) = AnalyzeColors(layout);
-                var savedPath = await SaveBackgroundAsync(tenantId, layout, ext, ct);
-                var originalPath = await SaveOriginalAsync(tenantId, bytes, ext, ct);
-
-                var template = new PosterTemplate
+                var refreshed = NormalizeTreatment(treatment);
+                SKImage finalLayout;
+                try
                 {
-                    TenantId = tenantId,
-                    Name = name.Trim(),
-                    Description = description?.Trim(),
-                    Sector = SectorCatalog.Normalize(sector),
-                    IsSystem = false,
-                    IsImported = true,
-                    IsActive = true,
-                    Theme = "template",
-                    AccentColor = accent,
-                    TextColor = textColor,
-                    BackgroundImagePath = savedPath,
-                    OriginalBackgroundPath = originalPath,
-                    ImportBoxesJson = validBoxes.Count > 0 ? JsonSerializer.Serialize(validBoxes) : null,
-                    BackgroundDim = 30,
-                    TextRegionsJson = BuildRegionsJson(validBoxes),
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
+                    finalLayout = ApplyTreatment(layout, refreshed);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Colour treatment failed; importing with the original look.");
+                    finalLayout = layout;
+                }
 
-                return new TemplateImportResult(true, template, null);
+                using (finalLayout)
+                {
+                    var (accent, textColor) = AnalyzeColors(finalLayout);
+                    if (refreshed.Kind == "fresh")
+                    {
+                        if (HexColor.TryParse(refreshed.FreshAccent, out var chosen))
+                        {
+                            accent = HexColor.ToHex(chosen);
+                        }
+
+                        textColor = HexColor.ToHex(HexColor.AutoTextColor(
+                            AverageColor(finalLayout)));
+                    }
+
+                    var savedPath = await SaveBackgroundAsync(tenantId, finalLayout, ext, ct);
+                    var originalPath = await SaveOriginalAsync(tenantId, bytes, ext, ct);
+
+                    var template = new PosterTemplate
+                    {
+                        TenantId = tenantId,
+                        Name = name.Trim(),
+                        Description = description?.Trim(),
+                        Sector = SectorCatalog.Normalize(sector),
+                        IsSystem = false,
+                        IsImported = true,
+                        IsActive = true,
+                        Theme = "template",
+                        AccentColor = accent,
+                        TextColor = textColor,
+                        BackgroundImagePath = savedPath,
+                        OriginalBackgroundPath = originalPath,
+                        ImportBoxesJson = validBoxes.Count > 0 ? JsonSerializer.Serialize(validBoxes) : null,
+                        BackgroundDim = 30,
+                        TextRegionsJson = BuildRegionsJson(validBoxes),
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+
+                    return new TemplateImportResult(true, template, null);
+                }
             }
         }
     }
@@ -299,6 +361,417 @@ public class TemplateImportService : ITemplateImportService
                 return new TemplateImportResult(true, template, null);
             }
         }
+    }
+
+    /// <summary>
+    /// Chat-style update: reads a plain-language instruction ("remove all text and
+    /// logos, make it blue"), figures out what to erase and which colour refresh to
+    /// apply, renders a small preview of the result and reports what it understood.
+    /// </summary>
+    public async Task<AiUpdateResult> ApplyInstructionAsync(
+        IFormFile? file, string? instruction, CancellationToken ct = default)
+    {
+        if (file is null || file.Length == 0 || file.Length > MaxFileBytes)
+        {
+            return new AiUpdateResult(false, null, "Choose a poster image first.", Array.Empty<ImportBox>(), new PosterTreatmentRequest("original"));
+        }
+
+        byte[] bytes;
+        await using (var ms = new MemoryStream())
+        {
+            await file.CopyToAsync(ms, ct);
+            bytes = ms.ToArray();
+        }
+
+        SKImage? image;
+        try
+        {
+            image = SKImage.FromEncodedData(bytes);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to decode uploaded poster for instruction preview.");
+            return new AiUpdateResult(false, null, "That image could not be read.", Array.Empty<ImportBox>(), new PosterTreatmentRequest("original"));
+        }
+
+        using (image)
+        {
+            var parsed = ParseInstruction(instruction ?? string.Empty);
+
+            var working = image;
+            var boxes = new List<ImportBox>();
+            if (parsed.RemoveText)
+            {
+                boxes.AddRange(DetectTextBlocks(image, parsed.RemoveLogos ? DetectLogoBlocks(image) : new List<ImportBox>()));
+            }
+
+            if (parsed.RemoveLogos)
+            {
+                boxes.AddRange(DetectLogoBlocks(image));
+            }
+
+            var validBoxes = NormalizeBoxes(boxes);
+            try
+            {
+                if (validBoxes.Count > 0)
+                {
+                    var edited = ApplyBoxEdits(image, validBoxes);
+                    if (!ReferenceEquals(edited, image))
+                    {
+                        working = edited;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Instruction erasing failed; previewing without erasures.");
+                working = image;
+                validBoxes = new List<ImportBox>();
+            }
+
+            using (working)
+            using (var treated = ApplyTreatment(working, parsed.Treatment))
+            {
+                const int previewWidth = 560;
+                var scale = Math.Min(1f, previewWidth / (float)Math.Max(1, treated.Width));
+                var info = new SKImageInfo(
+                    (int)(treated.Width * scale), (int)(treated.Height * scale), SKColorType.Rgba8888, SKAlphaType.Premul);
+                using var small = SKSurface.Create(info)
+                    ?? throw new InvalidOperationException($"Treatment preview surface failed ({info.Width}x{info.Height}).");
+                small.Canvas.DrawImage(treated, new SKRect(0, 0, info.Width, info.Height), SKSamplingOptions.Default, null);
+                using var snapshot = small.Snapshot()
+                    ?? throw new InvalidOperationException("Treatment preview snapshot failed.");
+                using var data = snapshot.Encode(SKEncodedImageFormat.Jpeg, 82);
+
+                return new AiUpdateResult(
+                    true,
+                    data?.ToArray(),
+                    DescribeInstruction(parsed, validBoxes),
+                    validBoxes,
+                    parsed.Treatment);
+            }
+        }
+    }
+
+    /// <summary>Parsed outcome of one chat instruction.</summary>
+    public sealed record ParsedInstruction(bool RemoveText, bool RemoveLogos, PosterTreatmentRequest Treatment);
+
+    private static readonly Dictionary<string, string> InstructionColors = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["red"] = "#E53935",
+        ["maroon"] = "#8E0000",
+        ["pink"] = "#EC407A",
+        ["orange"] = "#FB8C00",
+        ["gold"] = "#FFB300",
+        ["golden"] = "#FFB300",
+        ["yellow"] = "#FDD835",
+        ["green"] = "#43A047",
+        ["teal"] = "#00897B",
+        ["cyan"] = "#00ACC1",
+        ["blue"] = "#1E88E5",
+        ["navy"] = "#1565C0",
+        ["purple"] = "#8E24AA",
+        ["violet"] = "#7E57C2",
+        ["magenta"] = "#D81B60",
+        ["brown"] = "#6D4C41"
+    };
+
+    /// <summary>Turns free text into erase actions plus a colour treatment. Keyword
+    /// based on purpose: it runs offline and always explains what it understood.</summary>
+    public static ParsedInstruction ParseInstruction(string instruction)
+    {
+        var text = (instruction ?? string.Empty).ToLowerInvariant();
+
+        static bool HasVerb(string t) =>
+            System.Text.RegularExpressions.Regex.IsMatch(t, @"\b(remove|removing|delete|clear|erase|clean|strip|drop)\b");
+        var wantsText = HasVerb(text)
+            && System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(texts?|matter|words?|writing|letters?|numbers?|headings?|captions?)\b");
+        var wantsLogos = HasVerb(text)
+            && System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(logos?|emblems?|seals?|symbols?|stamps?|watermarks?|monograms?)\b");
+
+        var treatment = new PosterTreatmentRequest("original");
+
+        var grayscale = System.Text.RegularExpressions.Regex.IsMatch(
+            text, @"\b(black\s*(and|&|n)?\s*white|b\s*&\s*w|bw|gr[ae]y\s*-?\s*scale|monochrome|colourless|colorless|no colou?rs?)\b");
+        var freshBg = System.Text.RegularExpressions.Regex.IsMatch(
+            text, @"\b((new|changed?|replace[d]?|different|fresh|gradient)[\s-]*(background|bg)|background[\s-]*(change|replace))\b");
+        var enhance = System.Text.RegularExpressions.Regex.IsMatch(
+            text, @"\b(enhance|enhanced|brighten|brighter|vivid|sharpen|sharper|\bhd\b|pop|boost|refresh(?!ed)?\s+colou?rs?)\b")
+            && !freshBg;
+
+        // A named colour drives the request: "<colour> background" swaps the whole
+        // backdrop, otherwise it becomes a tint wash over the original art.
+        foreach (var kv in InstructionColors)
+        {
+            if (!System.Text.RegularExpressions.Regex.IsMatch(text, $@"\b{kv.Key}\b"))
+            {
+                continue;
+            }
+
+            var colourBg = System.Text.RegularExpressions.Regex.IsMatch(text, $@"{kv.Key}[\s-]*(background|bg|theme)")
+                || (freshBg && !System.Text.RegularExpressions.Regex.IsMatch(text, @"colou?rful"));
+            if (colourBg)
+            {
+                HexColor.TryParse(kv.Value, out var c);
+                var theme = HexColor.Luminance(c) < 90 ? "dark" : "light";
+                treatment = new PosterTreatmentRequest("fresh", FreshTheme: theme, FreshAccent: kv.Value);
+            }
+            else if (!grayscale)
+            {
+                treatment = new PosterTreatmentRequest("tint", TintHex: kv.Value, TintStrength: 0.45f);
+            }
+
+            break;
+        }
+
+        if (grayscale)
+        {
+            treatment = new PosterTreatmentRequest("grayscale");
+        }
+        else if (freshBg && treatment.Kind != "fresh")
+        {
+            treatment = System.Text.RegularExpressions.Regex.IsMatch(text, @"\bdark\b")
+                ? new PosterTreatmentRequest("fresh", FreshTheme: "dark")
+                : System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(white|light)\b")
+                    ? new PosterTreatmentRequest("fresh", FreshTheme: "light")
+                    : new PosterTreatmentRequest("fresh", FreshTheme: "colorful");
+        }
+        else if (enhance && treatment.Kind == "original")
+        {
+            treatment = new PosterTreatmentRequest("enhance");
+        }
+
+        return new ParsedInstruction(wantsText, wantsLogos, treatment);
+    }
+
+    private static string DescribeInstruction(ParsedInstruction parsed, IReadOnlyList<ImportBox> boxes)
+    {
+        if (!parsed.RemoveText && !parsed.RemoveLogos && parsed.Treatment.Kind == "original")
+        {
+            return "I couldn't find a specific change in that. Mention what to remove (text or logos) or a look, e.g. \"remove all text\", \"make it blue\" or \"black and white\".";
+        }
+
+        var parts = new List<string>();
+        if (parsed.RemoveText)
+        {
+            parts.Add($"erasing {boxes.Count(b => b.Type == "erase")} text area{(boxes.Count(b => b.Type == "erase") == 1 ? "" : "s")}");
+        }
+
+        if (parsed.RemoveLogos)
+        {
+            parts.Add($"removing {boxes.Count(b => b.Type == "erase-logo")} logo area{(boxes.Count(b => b.Type == "erase-logo") == 1 ? "" : "s")}");
+        }
+
+        switch (parsed.Treatment.Kind)
+        {
+            case "tint":
+                parts.Add($"{(parsed.Treatment.TintHex ?? "#000000").TrimStart('#')} colour wash");
+                break;
+            case "enhance":
+                parts.Add("colours enhanced");
+                break;
+            case "grayscale":
+                parts.Add("converted to black & white");
+                break;
+            case "fresh":
+                parts.Add($"fresh {(parsed.Treatment.FreshTheme ?? "colorful")} background");
+                break;
+        }
+
+        return char.ToUpperInvariant(parts[0][0]) + parts[0][1..]
+            + (parts.Count > 1 ? ", " + string.Join(", ", parts.Skip(1)) : string.Empty) + ".";
+    }
+
+    // ---------------------------------------------------------- colour treatments
+
+    /// <summary>Fills in defaults and clamps values so a malformed request can never
+    /// produce an invalid treatment.</summary>
+    public static PosterTreatmentRequest NormalizeTreatment(PosterTreatmentRequest? treatment)
+    {
+        if (treatment is null || string.IsNullOrWhiteSpace(treatment.Kind))
+        {
+            return new PosterTreatmentRequest("original");
+        }
+
+        var kind = treatment.Kind.Trim().ToLowerInvariant();
+        if (kind is not ("tint" or "enhance" or "grayscale" or "fresh"))
+        {
+            return new PosterTreatmentRequest("original");
+        }
+
+        var strength = Math.Clamp(treatment.TintStrength <= 0 ? 0.4f : treatment.TintStrength, 0.05f, 0.85f);
+        var theme = (treatment.FreshTheme ?? "colorful").Trim().ToLowerInvariant();
+        if (theme is not ("colorful" or "light" or "dark"))
+        {
+            theme = "colorful";
+        }
+
+        return new PosterTreatmentRequest(kind, treatment.TintHex, strength, theme, treatment.FreshAccent);
+    }
+
+    public async Task<byte[]?> RenderTreatmentPreviewAsync(
+        IFormFile? file, PosterTreatmentRequest? treatment, CancellationToken ct = default)
+    {
+        if (file is null || file.Length == 0 || file.Length > MaxFileBytes)
+        {
+            return null;
+        }
+
+        byte[] bytes;
+        await using (var ms = new MemoryStream())
+        {
+            await file.CopyToAsync(ms, ct);
+            bytes = ms.ToArray();
+        }
+
+        try
+        {
+            using var image = SKImage.FromEncodedData(bytes);
+            const int previewWidth = 560;
+            var scale = Math.Min(1f, previewWidth / (float)image.Width);
+            var info = new SKImageInfo(
+                (int)(image.Width * scale), (int)(image.Height * scale), SKColorType.Rgba8888, SKAlphaType.Premul);
+            using var small = SKSurface.Create(info);
+            small.Canvas.DrawImage(image, new SKRect(0, 0, info.Width, info.Height), SKSamplingOptions.Default, null);
+            using var treated = ApplyTreatment(small.Snapshot(), NormalizeTreatment(treatment));
+            using var data = treated.Encode(SKEncodedImageFormat.Jpeg, 82);
+            return data?.ToArray();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Treatment preview failed.");
+            return null;
+        }
+    }
+
+    private static SKImage ApplyTreatment(SKImage image, PosterTreatmentRequest t)
+    {
+        switch (t.Kind)
+        {
+            case "grayscale":
+                return ProcessPixels(image, (r, g, b) =>
+                {
+                    var l = (byte)Math.Clamp(0.299f * r + 0.587f * g + 0.114f * b, 0, 255);
+                    return (l, l, l);
+                });
+            case "enhance":
+                return ProcessPixels(image, (r, g, b) =>
+                {
+                    var avg = (r + g + b) / 3f;
+                    byte Map(float v)
+                    {
+                        v = (v - 128f) * 1.16f + 128f;      // contrast
+                        v = avg + (v - avg) * 1.3f;         // saturation
+                        v = v * 1.06f + 6f;                 // brightness
+                        return (byte)Math.Clamp(v, 0, 255);
+                    }
+                    return (Map(r), Map(g), Map(b));
+                });
+            case "tint":
+                if (!HexColor.TryParse(t.TintHex, out var tint))
+                {
+                    return image;
+                }
+
+                var s = t.TintStrength;
+                return ProcessPixels(image, (r, g, b) =>
+                {
+                    var lum = (0.299f * r + 0.587f * g + 0.114f * b) / 255f;
+                    var shade = 0.35f + 0.75f * lum;        // keep shadows dark, highlights tinted
+                    byte Mix(byte orig, byte tc)
+                    {
+                        var target = Math.Clamp(tc * shade * 1.12f, 0, 255);
+                        return (byte)Math.Clamp(orig * (1 - s) + target * s, 0, 255);
+                    }
+                    return (Mix(r, tint.Red), Mix(g, tint.Green), Mix(b, tint.Blue));
+                });
+            case "fresh":
+                return FreshBackground(image.Width, image.Height, t.FreshTheme ?? "colorful", t.FreshAccent);
+            default:
+                return image;
+        }
+    }
+
+    private delegate (byte R, byte G, byte B) PixelMap(byte r, byte g, byte b);
+
+    private static SKImage ProcessPixels(SKImage image, PixelMap map)
+    {
+        var info = new SKImageInfo(image.Width, image.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the treatment surface.");
+        surface.Canvas.DrawImage(image, 0, 0);
+        using var pm = surface.PeekPixels() ?? throw new InvalidOperationException("Failed to read the treatment pixels.");
+        var span = pm.GetPixelSpan();
+        for (var i = 0; i + 3 < span.Length; i += 4)
+        {
+            (span[i], span[i + 1], span[i + 2]) = map(span[i], span[i + 1], span[i + 2]);
+        }
+
+        return surface.Snapshot();
+    }
+
+    /// <summary>Studio-style gradient poster background: a diagonal two-colour wash
+    /// plus two soft accent glows, sized to the original upload.</summary>
+    private static SKImage FreshBackground(int width, int height, string theme, string? accentHex)
+    {
+        var (c0, c1, defaultAccent) = theme switch
+        {
+            "light" => (new SKColor(255, 247, 232), new SKColor(255, 255, 255), new SKColor(255, 111, 0)),
+            "dark" => (new SKColor(13, 20, 36), new SKColor(32, 44, 66), new SKColor(66, 165, 245)),
+            _ => (new SKColor(233, 30, 99), new SKColor(255, 111, 0), new SKColor(255, 213, 79))
+        };
+
+        if (!HexColor.TryParse(accentHex, out var glow))
+        {
+            glow = defaultAccent;
+        }
+
+        var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the fresh background surface.");
+        var canvas = surface.Canvas;
+
+        using (var shader = SKShader.CreateLinearGradient(
+            new SKPoint(0, 0), new SKPoint(width, height),
+            new[] { c0, c1 }, null, SKShaderTileMode.Clamp))
+        using (var paint = new SKPaint { Shader = shader })
+        {
+            canvas.DrawRect(0, 0, width, height, paint);
+        }
+
+        DrawGlow(canvas, width * 0.14f, height * 0.10f, Math.Min(width, height) * 0.55f, glow, 0.30f);
+        DrawGlow(canvas, width * 0.90f, height * 0.88f, Math.Min(width, height) * 0.62f, glow, 0.18f);
+
+        return surface.Snapshot();
+    }
+
+    private static void DrawGlow(SKCanvas canvas, float cx, float cy, float radius, SKColor color, float opacity)
+    {
+        var alpha = (byte)Math.Clamp(255 * opacity, 0, 255);
+        using var shader = SKShader.CreateRadialGradient(
+            new SKPoint(cx, cy), radius,
+            new[] { color.WithAlpha(alpha), color.WithAlpha(0) },
+            null, SKShaderTileMode.Clamp);
+        using var paint = new SKPaint { Shader = shader };
+        canvas.DrawRect(0, 0, canvas.DeviceClipBounds.Width, canvas.DeviceClipBounds.Height, paint);
+    }
+
+    private static SKColor AverageColor(SKImage image)
+    {
+        const int size = 16;
+        using var small = SKSurface.Create(new SKImageInfo(size, size, SKColorType.Rgba8888, SKAlphaType.Premul));
+        small.Canvas.DrawImage(image, new SKRect(0, 0, size, size), SKSamplingOptions.Default, null);
+        using var pm = small.PeekPixels()!;
+        var span = pm.GetPixelSpan();
+        long r = 0, g = 0, b = 0;
+        var n = 0;
+        for (var i = 0; i + 3 < span.Length; i += 4)
+        {
+            r += span[i];
+            g += span[i + 1];
+            b += span[i + 2];
+            n++;
+        }
+
+        return new SKColor((byte)(r / Math.Max(1, n)), (byte)(g / Math.Max(1, n)), (byte)(b / Math.Max(1, n)));
     }
 
     // --------------------------------------------------------------- box editing

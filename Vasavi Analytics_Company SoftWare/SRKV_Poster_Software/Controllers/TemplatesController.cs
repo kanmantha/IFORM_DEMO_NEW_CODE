@@ -105,6 +105,13 @@ public class TemplatesController : Controller
             return View(model);
         }
 
+        var treatmentRequest = TemplateImportService.NormalizeTreatment(new PosterTreatmentRequest(
+            model.TreatmentKind ?? "original",
+            model.TintHex,
+            model.TintStrength ?? 0.4f,
+            model.FreshTheme,
+            model.FreshAccent));
+
         var result = await _import.ImportAsync(
             _tenant.TenantId,
             model.Name,
@@ -112,6 +119,7 @@ public class TemplatesController : Controller
             model.Sector,
             model.Upload,
             ParseBoxes(model.BoxesJson),
+            treatmentRequest,
             ct);
 
         if (!result.Success || result.Template is null)
@@ -138,8 +146,68 @@ public class TemplatesController : Controller
             }
         }
 
-        TempData["Success"] = $"Template '{result.Template.Name}' created from your upload. Pick it on the Events page to reuse the layout.";
+        var refreshNote = treatmentRequest.Kind switch
+        {
+            "tint" => $" Refreshed with a {treatmentRequest.TintHex} colour wash.",
+            "enhance" => " Colours brightened and enhanced.",
+            "grayscale" => " Converted to black & white.",
+            "fresh" => $" Rebuilt on a fresh {treatmentRequest.FreshTheme} background; your original upload is kept safe.",
+            _ => string.Empty
+        };
+        TempData["Success"] = $"Template '{result.Template.Name}' created from your upload.{refreshNote} Pick it on the Events page to reuse the layout.";
         return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AiUpdate(IFormFile? upload, string? instruction, CancellationToken ct)
+    {
+        var result = await _import.ApplyInstructionAsync(upload, instruction, ct);
+        if (!result.Success)
+        {
+            return Json(new { ok = false, message = result.Summary });
+        }
+
+        return Json(new
+        {
+            ok = true,
+            message = result.Summary,
+            image = result.Image is null ? null : "data:image/jpeg;base64," + Convert.ToBase64String(result.Image),
+            boxes = result.Boxes.Select(b => new { type = b.Type, x = b.X, y = b.Y, w = b.W, h = b.H }),
+            treatment = new
+            {
+                kind = result.Treatment.Kind,
+                tintHex = result.Treatment.TintHex,
+                tintStrength = result.Treatment.TintStrength,
+                freshTheme = result.Treatment.FreshTheme,
+                freshAccent = result.Treatment.FreshAccent
+            }
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PreviewTreatment(
+        IFormFile? upload,
+        string? kind,
+        string? tintHex,
+        float? strength,
+        string? freshTheme,
+        string? freshAccent,
+        CancellationToken ct)
+    {
+        var bytes = await _import.RenderTreatmentPreviewAsync(
+            upload,
+            TemplateImportService.NormalizeTreatment(new PosterTreatmentRequest(
+                kind ?? "original", tintHex, strength ?? 0.4f, freshTheme, freshAccent)),
+            ct);
+
+        if (bytes is null)
+        {
+            return BadRequest();
+        }
+
+        return File(bytes, "image/jpeg");
     }
 
     [HttpPost]
