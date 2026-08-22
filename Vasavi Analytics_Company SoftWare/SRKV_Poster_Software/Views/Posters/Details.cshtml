@@ -19,6 +19,14 @@
         </div>
     </div>
     <div class="d-flex gap-2">
+        @if (poster.Status != PosterStatus.Failed)
+        {
+            <partial name="_PosterShare"
+                     model='@(poster.Id,
+                              Url.Action("Image", "Posters", new { id = poster.Id }) ?? "",
+                              poster.Caption + " " + poster.Hashtags,
+                              "btn-success")' />
+        }
         <a asp-action="DownloadImage" asp-route-id="@poster.Id" class="btn btn-gradient">Download PNG</a>
         <a asp-action="DownloadCaption" asp-route-id="@poster.Id" class="btn btn-outline-secondary">Download Caption</a>
         <form asp-action="Delete" asp-route-id="@poster.Id" method="post"

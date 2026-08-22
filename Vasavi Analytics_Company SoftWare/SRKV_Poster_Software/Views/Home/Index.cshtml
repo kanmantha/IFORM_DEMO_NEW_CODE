@@ -122,6 +122,11 @@
                     <div class="d-flex gap-2">
                         <a asp-controller="Posters" asp-action="Details" asp-route-id="@Model.TodaysPoster.Id"
                            class="btn btn-sm btn-gradient flex-fill">Open</a>
+                        <partial name="_PosterShare"
+                                 model='@(Model.TodaysPoster.Id,
+                                          Url.Action("Image", "Posters", new { id = Model.TodaysPoster.Id }) ?? "",
+                                          Model.TodaysPoster.Caption + " " + Model.TodaysPoster.Hashtags,
+                                          "btn-sm btn-success flex-fill")' />
                         <a asp-controller="Posters" asp-action="DownloadImage" asp-route-id="@Model.TodaysPoster.Id"
                            class="btn btn-sm btn-outline-secondary flex-fill">Download</a>
                     </div>
