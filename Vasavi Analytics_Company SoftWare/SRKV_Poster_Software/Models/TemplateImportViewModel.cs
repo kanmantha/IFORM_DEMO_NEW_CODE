@@ -11,8 +11,9 @@ public class TemplateImportViewModel
     [StringLength(1000)]
     public string? Description { get; set; }
 
-    [StringLength(50)]
-    public string Sector { get; set; } = SectorCatalog.General;
+    // Nullable so posting without a workspace/sector choice never blocks the import;
+    // the controller falls back to the general sector.
+    public string? Sector { get; set; } = SectorCatalog.General;
 
     [Required]
     public IFormFile? Upload { get; set; }

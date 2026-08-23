@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using DailyPosterGenerator.Data;
 using DailyPosterGenerator.Models;
 using DailyPosterGenerator.Services;
@@ -128,7 +128,7 @@ public class TemplatesController : Controller
             _tenant.TenantId,
             model.Name,
             model.Description,
-            model.Sector,
+            SectorCatalog.Normalize(model.Sector) ?? SectorCatalog.General,
             model.Upload,
             ParseBoxes(model.BoxesJson),
             treatmentRequest,
@@ -137,11 +137,15 @@ public class TemplatesController : Controller
         if (!result.Success || result.Template is null)
         {
             ModelState.AddModelError(string.Empty, result.Error ?? "Import failed.");
+            ModelState.AddModelError(string.Empty, result.Error ?? "Import failed.");
             return View(model);
         }
 
         await using (var db = await _dbFactory.CreateDbContextAsync(ct))
         {
+            // Template names are unique per workspace; re-importing a poster with the
+            // same name gets a numbered variant instead of a database error.
+            result.Template.Name = await UniqueTemplateName(db, _tenant.TenantId, result.Template.Name, null, ct);
             db.PosterTemplates.Add(result.Template);
             await db.SaveChangesAsync(ct);
         }
@@ -460,6 +464,36 @@ public class TemplatesController : Controller
 
         TempData["Success"] = $"Template '{template.Name}' deleted.";
         return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>Returns <paramref name="desired"/> untouched when free within the
+    /// workspace, otherwise the first free "name (2)", "name (3)" variant - template
+    /// names are unique per tenant, so imports never collide with existing rows.</summary>
+    private static async Task<string> UniqueTemplateName(
+        DailyPosterDbContext db, int tenantId, string desired, int? excludeId, CancellationToken ct)
+    {
+        var names = (await db.PosterTemplates.AsNoTracking()
+                .Where(t => t.TenantId == tenantId && t.Id != excludeId)
+                .Select(t => t.Name)
+                .ToListAsync(ct))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var name = desired.Trim();
+        if (!names.Contains(name))
+        {
+            return name;
+        }
+
+        for (var suffix = 2; suffix < 1000; suffix++)
+        {
+            var candidate = $"{name} ({suffix})";
+            if (!names.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return $"{name} ({DateTime.UtcNow.Ticks})";
     }
 
     private static List<ImportBox> ParseBoxes(string? json)
