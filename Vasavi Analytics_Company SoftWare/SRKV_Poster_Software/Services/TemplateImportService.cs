@@ -744,13 +744,115 @@ public class TemplateImportService : ITemplateImportService
     /// its stored original poster, bakes erasures plus any colour refresh into a new
     /// background and updates the template in place. The untouched upload stays safe.
     /// </summary>
+    /// <summary>
+    /// Maps a chat instruction onto a procedurally generated (Studio) template:
+    /// colour words retune the accent, style words switch light/dark/colorful.
+    /// </summary>
+    private static AiUpdateResult ApplyInstructionToStudioTemplate(PosterTemplate template, string? instruction)
+    {
+        var parsed = ParseInstruction(instruction ?? string.Empty);
+        var t = parsed.Treatment;
+        var changed = false;
+        var notes = new List<string>();
+
+        switch (t.Kind)
+        {
+            case "fresh":
+                template.Theme = t.FreshTheme switch { "dark" => "dark", "light" => "light", _ => "colorful" };
+                changed = true;
+                notes.Add($"style set to {template.Theme}");
+                if (!string.IsNullOrWhiteSpace(t.FreshAccent))
+                {
+                    template.AccentColor = t.FreshAccent;
+                    notes.Add($"accent {t.FreshAccent.ToUpperInvariant()}");
+                }
+                break;
+
+            case "tint":
+                template.AccentColor = t.TintHex;
+                if (HexColor.TryParse(t.TintHex, out var tint) && HexColor.Luminance(tint) > 180f)
+                {
+                    template.Theme = "light";
+                }
+                changed = true;
+                notes.Add($"accent colour set to {t.TintHex.ToUpperInvariant()}");
+                break;
+
+            case "grayscale":
+                template.AccentColor = "#6B7280";
+                template.Theme = "light";
+                changed = true;
+                notes.Add("a neutral monochrome accent was applied");
+                break;
+
+            case "enhance":
+                notes.Add("studio templates are drawn fresh every day, so they are always full quality");
+                break;
+
+            default:
+                if (parsed.RemoveText || parsed.RemoveLogos)
+                {
+                    notes.Add("this template draws its text and icons fresh each time, so there is nothing baked in to erase");
+                }
+                else
+                {
+                    var lower = (instruction ?? string.Empty).ToLowerInvariant();
+                    if (System.Text.RegularExpressions.Regex.IsMatch(lower, @"\b(light|bright|airy|soft|pastel)\b"))
+                    {
+                        template.Theme = "light";
+                        changed = true;
+                        notes.Add("style set to light");
+                    }
+                    else if (System.Text.RegularExpressions.Regex.IsMatch(lower, @"\b(dark|moody|midnight|night)\b"))
+                    {
+                        template.Theme = "dark";
+                        changed = true;
+                        notes.Add("style set to dark");
+                    }
+                    else if (System.Text.RegularExpressions.Regex.IsMatch(lower, @"\b(colou?rful|vibrant|festive|bold)\b"))
+                    {
+                        template.Theme = "colorful";
+                        changed = true;
+                        notes.Add("style set to colourful");
+                    }
+                }
+                break;
+        }
+
+        if (changed)
+        {
+            template.UpdatedAt = DateTime.UtcNow;
+            return new AiUpdateResult(true, null,
+                "Done - " + string.Join(", ", notes) + ". The next poster you generate uses the new look.",
+                Array.Empty<ImportBox>(), new PosterTreatmentRequest("original"));
+        }
+
+        return new AiUpdateResult(true, null,
+            notes.Count > 0
+                ? char.ToUpperInvariant(notes[0][0]) + notes[0][1..] + "."
+                : "Describe a colour or style instead, e.g. \"make it dark blue\", \"black and white\" or \"make it light and airy\".",
+            Array.Empty<ImportBox>(), new PosterTreatmentRequest("original"));
+    }
+
     public async Task<AiUpdateResult> ApplyInstructionToTemplateAsync(
         PosterTemplate template, string? instruction, CancellationToken ct = default)
     {
-        var sourceRelative = string.IsNullOrWhiteSpace(template?.OriginalBackgroundPath)
-            ? template?.BackgroundImagePath
+        if (template is null)
+        {
+            return new AiUpdateResult(false, null, "This template has no poster image to update.", Array.Empty<ImportBox>(), new PosterTreatmentRequest("original"));
+        }
+
+        // Studio templates are generated procedurally (theme + accent), so instructions
+        // retune those settings instead of editing a stored image.
+        if (!template.IsImported)
+        {
+            return ApplyInstructionToStudioTemplate(template, instruction);
+        }
+
+        var sourceRelative = string.IsNullOrWhiteSpace(template.OriginalBackgroundPath)
+            ? template.BackgroundImagePath
             : template.OriginalBackgroundPath;
-        if (template is null || string.IsNullOrWhiteSpace(sourceRelative))
+        if (string.IsNullOrWhiteSpace(sourceRelative))
         {
             return new AiUpdateResult(false, null, "This template has no poster image to update.", Array.Empty<ImportBox>(), new PosterTreatmentRequest("original"));
         }

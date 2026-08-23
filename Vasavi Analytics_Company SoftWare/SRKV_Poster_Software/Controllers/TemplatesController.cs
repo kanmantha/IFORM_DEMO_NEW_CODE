@@ -218,7 +218,10 @@ public class TemplatesController : Controller
             ok = true,
             message = result.Summary,
             image = result.Image is null ? null : "data:image/jpeg;base64," + Convert.ToBase64String(result.Image),
-            backgroundUrl = template.BackgroundImagePath + "?v=" + DateTime.UtcNow.Ticks,
+            backgroundUrl = template.IsImported ? template.BackgroundImagePath + "?v=" + DateTime.UtcNow.Ticks : null,
+            thumbUrl = !template.IsImported && !string.IsNullOrWhiteSpace(template.ThumbnailPath)
+                ? template.ThumbnailPath + "?v=" + DateTime.UtcNow.Ticks
+                : null,
             boxes = result.Boxes.Select(b => new { type = b.Type, x = b.X, y = b.Y, w = b.W, h = b.H }),
             treatment = new { kind = result.Treatment.Kind }
         });
