@@ -7,6 +7,7 @@ using IForm.Persistence;
 using IForm.Web;
 using IForm.Web.Background;
 using IForm.Web.Middleware;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -74,6 +75,11 @@ try
 
     var app = builder.Build();
 
+    app.UseForwardedHeaders(new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+    });
+
     if (app.Environment.IsDevelopment())
     {
         app.UseDeveloperExceptionPage();
@@ -124,7 +130,7 @@ static async Task SeedDatabaseAsync(WebApplication app)
     try
     {
         var context = services.GetRequiredService<AppDbContext>();
-        await context.Database.MigrateAsync();
+        await context.Database.EnsureCreatedAsync();
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
         var configuration = services.GetRequiredService<IConfiguration>();

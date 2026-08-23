@@ -10,6 +10,7 @@ while ($true) {
         continue
     }
     Log "starting IForm.Web.exe"
+    $env:ASPNETCORE_URLS = 'https://localhost:7218;http://localhost:5246'
     & $exe --environment Development
     $code = $LASTEXITCODE
     Log "exited code=$code"

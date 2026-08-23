@@ -1,4 +1,5 @@
 using System.Text.Json;
+using IForm.Application.Services;
 using IForm.Domain.Entities;
 using IForm.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
@@ -15,7 +16,8 @@ public static class DbSeeder
         await SeedRolesAsync(roleManager);
         await SeedPlansAsync(context);
         await SeedSystemSettingsAsync(context);
-        await SeedDemoTenantAsync(context, userManager);
+        var tenantId = await SeedDemoTenantAsync(context, userManager);
+        await SeedDemoDataAsync(context, userManager, tenantId);
         await SeedSuperAdminAsync(context, userManager, superAdminEmail ?? "superadmin@iform.example.com", superAdminPassword ?? "Admin@12345");
     }
 
@@ -96,9 +98,10 @@ public static class DbSeeder
         await context.SaveChangesAsync();
     }
 
-    private static async Task SeedDemoTenantAsync(AppDbContext context, UserManager<ApplicationUser> userManager)
+    private static async Task<Guid> SeedDemoTenantAsync(AppDbContext context, UserManager<ApplicationUser> userManager)
     {
-        if (await context.Tenants.AnyAsync(t => t.Slug == "i-form-aluminium")) return;
+        var existingTenant = await context.Tenants.FirstOrDefaultAsync(t => t.Slug == "i-form-aluminium");
+        if (existingTenant != null) return existingTenant.Id;
 
         var tenant = new Tenant
         {
@@ -158,6 +161,121 @@ public static class DbSeeder
             if (result.Succeeded)
                 await userManager.AddToRoleAsync(admin, AppRoles.TenantAdmin);
         }
+
+        return tenant.Id;
+    }
+
+    private static async Task SeedDemoDataAsync(AppDbContext context, UserManager<ApplicationUser> userManager, Guid tenantId)
+    {
+        var manager = await EnsureUserAsync(userManager, tenantId, "manager", "manager@iform.example.com",
+            "Mgr@12345", "I-FORM Manager", AppRoles.Manager);
+        await EnsureUserAsync(userManager, tenantId, "engineer1", "engineer1@iform.example.com",
+            "Eng@12345", "I-FORM Site Engineer 1", AppRoles.SiteEngineer);
+        await EnsureUserAsync(userManager, tenantId, "engineer2", "engineer2@iform.example.com",
+            "Eng2@12345", "I-FORM Site Engineer 2", AppRoles.SiteEngineer);
+
+        if (!await context.Projects.IgnoreQueryFilters().AnyAsync(p => p.TenantId == tenantId))
+        {
+            var project = new Project
+            {
+                TenantId = tenantId,
+                ProjectCode = "PRJ-1001",
+                ProjectName = "I-FORM Demo Project",
+                Client = "I-FORM Aluminium & Design LLP",
+                Location = "India",
+                Status = ProjectStatus.Active,
+                AssignedManagerId = manager?.Id,
+                StartDate = DateTime.UtcNow.AddDays(-30),
+                PlannedCompletion = DateTime.UtcNow.AddDays(300)
+            };
+            context.Projects.Add(project);
+            await context.SaveChangesAsync();
+
+            context.Ipos.Add(new Ipo
+            {
+                TenantId = tenantId,
+                IpoNumber = "IPO-1001",
+                ProjectId = project.Id,
+                Client = project.Client,
+                Quantity = 100,
+                QuantitySqm = 500,
+                DispatchStatus = DispatchStatus.Pending,
+                SlabTargetCastingDate = DateTime.UtcNow.AddDays(7)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        if (!await context.Products.IgnoreQueryFilters().AnyAsync(p => p.TenantId == tenantId))
+        {
+            var photoCodes = new HashSet<string>
+            {
+                "DAAA", "DABA", "DACA", "DADA", "DAGA", "DAGB", "DAGC", "DAHA", "DAIB",
+                "DBAA0000", "DCAC0059", "DCBC0157", "DCCE0001", "DDBA0001", "DDCF0092",
+                "DECA0245", "DEDA0001", "DFAA", "DFAB1675", "DFAC1610", "DFAC1611",
+                "DFAC1636", "DFAE", "DFAH2012", "DHBA0001", "DIBB0001", "DJBB0001",
+                "DKAA", "DLAA0003", "DPAA0001", "DQAA18002000", "DQAF0600", "DQAG3000",
+                "DRAA1710", "DRBA0001", "DRCA0002", "DRDA0001", "DRFA0001", "DRGA0001",
+                "DRNA0004", "DROB0001", "DRTA0005", "DRVA0001", "DTGA0001", "DTGD",
+                "DUAA0001", "DZAA", "DZAA0005"
+            };
+
+            foreach (var item in AccessoryCatalogue.All)
+            {
+                Guid? categoryId = null;
+                if (!string.IsNullOrWhiteSpace(item.Category))
+                {
+                    var categoryName = item.Category.Trim();
+                    var category = await context.ProductCategories
+                        .IgnoreQueryFilters()
+                        .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.Name == categoryName);
+                    if (category == null)
+                    {
+                        category = new ProductCategory { TenantId = tenantId, Name = categoryName };
+                        context.ProductCategories.Add(category);
+                        await context.SaveChangesAsync();
+                    }
+                    categoryId = category.Id;
+                }
+
+                context.Products.Add(new Product
+                {
+                    TenantId = tenantId,
+                    ProductCode = item.Code,
+                    ProductName = item.Name,
+                    Specification = item.Specification,
+                    Material = item.Material,
+                    Unit = item.Unit,
+                    Description = item.Description,
+                    CategoryId = categoryId,
+                    PhotoPath = photoCodes.Contains(item.Code) ? $"products/{item.Code}.jpg" : null,
+                    Source = "iform-catalogue",
+                    IsActive = true
+                });
+            }
+            await context.SaveChangesAsync();
+        }
+    }
+
+    private static async Task<ApplicationUser?> EnsureUserAsync(UserManager<ApplicationUser> userManager, Guid tenantId,
+        string userName, string email, string password, string fullName, string role)
+    {
+        var user = await userManager.FindByEmailAsync(email);
+        if (user != null) return user;
+
+        user = new ApplicationUser
+        {
+            UserName = userName,
+            Email = email,
+            FullName = fullName,
+            EmailConfirmed = true,
+            TenantId = tenantId,
+            IsActive = true,
+            MustChangePassword = false
+        };
+        var result = await userManager.CreateAsync(user, password);
+        if (result.Succeeded)
+            await userManager.AddToRoleAsync(user, role);
+        return user;
     }
 
     private static void SeedDefaultEmailTemplates(AppDbContext context, Guid tenantId)

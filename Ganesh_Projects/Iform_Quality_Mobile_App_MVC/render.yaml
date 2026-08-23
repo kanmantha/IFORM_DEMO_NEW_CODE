@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: iform-sitequery
+    runtime: docker
+    repo: https://github.com/kanmantha/Iform_Quality_Mobile_App_MVC_Demo
+    branch: render
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: Database__Provider
+        value: Sqlite
+      - key: ConnectionStrings__DefaultConnection
+        value: "Data Source=/app/data/iform.db"
+      - key: Storage__Provider
+        value: Local
+      - key: Storage__Local__RootPath
+        value: /app/storage
+      - key: ApplicationBaseUrl
+        value: ""
+      - key: Email__Provider
+        value: Log
+      - key: Email__From
+        value: no-reply@iform.example.com
+      - key: Payment__Provider
+        value: Mock
+      - key: Seed__SuperAdminEmail
+        value: superadmin@iform.example.com
+      - key: Seed__SuperAdminPassword
+        value: Admin@12345

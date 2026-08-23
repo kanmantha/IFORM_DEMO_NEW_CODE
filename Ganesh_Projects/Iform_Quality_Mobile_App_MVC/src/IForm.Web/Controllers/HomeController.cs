@@ -18,7 +18,29 @@ public class HomeController : Controller
 
     public IActionResult Index()
     {
-        return RedirectToAction("Index", "Dashboard");
+        return View();
+    }
+
+    public IActionResult WorkPermit()
+    {
+        return UnderConstruction("Work Permit");
+    }
+
+    public IActionResult Quality()
+    {
+        return UnderConstruction("Quality");
+    }
+
+    public IActionResult Safety()
+    {
+        return UnderConstruction("Safety");
+    }
+
+    public IActionResult UnderConstruction(string feature)
+    {
+        ViewData["Feature"] = feature;
+        ViewData["Title"] = $"{feature} - Under Construction";
+        return View("UnderConstruction");
     }
 
     [AllowAnonymous]

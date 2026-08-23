@@ -4,3 +4,6 @@
 # csproj, wwwroot) from version control.
 !src/
 !src/IForm.Web/
+.vs/
+bin/
+obj/

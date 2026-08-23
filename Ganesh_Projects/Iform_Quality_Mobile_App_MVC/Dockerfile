@@ -14,8 +14,8 @@ EXPOSE 8080
 RUN mkdir -p /app/storage /app/logs
 
 COPY --from=build /app/publish .
+COPY src/IForm.Web/storage /app/storage
 
-ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 
-ENTRYPOINT ["dotnet", "IForm.Web.dll"]
+CMD ["sh", "-c", "export ASPNETCORE_URLS=http://0.0.0.0:${PORT:-8080}; mkdir -p /app/data /app/logs; dotnet IForm.Web.dll"]

@@ -4,6 +4,7 @@
     <ProjectReference Include="..\IForm.Domain\IForm.Domain.csproj" />
     <ProjectReference Include="..\IForm.Contracts\IForm.Contracts.csproj" />
     <ProjectReference Include="..\IForm.Infrastructure\IForm.Infrastructure.csproj" />
+    <ProjectReference Include="..\IForm.Application\IForm.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -12,6 +13,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="10.0.11" />
