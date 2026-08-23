@@ -177,6 +177,34 @@ app.MapControllerRoute(
 // process from a previous run), terminate it so startup never fails with "address already in use".
 ReleasePortForPreviousInstance(ResolveConfiguredPorts());
 
+// Open the UI in the default browser as soon as the server is listening. Handling this inside
+// the app (rather than via VS Code tasks or launchSettings) guarantees exactly one browser tab
+// opens no matter how the app is started - F5, dotnet run, or the executable directly.
+if (app.Environment.IsDevelopment())
+{
+    var browserOpened = false;
+    app.Lifetime.ApplicationStarted.Register(() =>
+    {
+        if (browserOpened)
+        {
+            return;
+        }
+
+        browserOpened = true;
+        try
+        {
+            var target = app.Urls.FirstOrDefault(u => u.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                         ?? app.Urls.FirstOrDefault()
+                         ?? "http://localhost:5011";
+            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DailyPosterGenerator] Could not open the browser automatically ({ex.Message}). Open http://localhost:5011 manually.");
+        }
+    });
+}
+
 app.Run();
 
 // Returns every port the app is configured to listen on (multiple URLs may be
