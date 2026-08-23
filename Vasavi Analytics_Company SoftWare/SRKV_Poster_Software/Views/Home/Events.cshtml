@@ -1,6 +1,14 @@
 @model EventPreviewViewModel
 @{
     ViewData["Title"] = "Generate Poster";
+    var currentTenantId = (int)(ViewBag.CurrentTenantId ?? 1);
+    var tenantNames = ViewBag.TenantNames as Dictionary<int, string> ?? new Dictionary<int, string>();
+    string WorkspaceLabel(int tenantId)
+    {
+        if (tenantId == 0 || tenantId == currentTenantId) return string.Empty;
+        var name = tenantNames.TryGetValue(tenantId, out var n) ? n : $"Workspace {tenantId}";
+        return name.Length > 14 ? name[..13] + "…" : name;
+    }
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -58,16 +66,25 @@
                                 <label class="col template-option @(selected ? "selected" : "")" style="cursor:pointer;">
                                     <input type="radio" name="templateId" value="@t.Id" class="d-none template-radio" @(selected ? "checked" : "") />
                                     <div class="card h-100 template-card">
-                                        @if (!string.IsNullOrWhiteSpace(t.ThumbnailPath))
-                                        {
-                                            <div class="template-thumb">
-                                                <img src="@t.ThumbnailPath" alt="@t.Name" loading="lazy" />
-                                                @if (t.IsSystem)
-                                                {
-                                                    <span class="badge text-bg-dark template-badge">System</span>
-                                                }
-                                            </div>
-                                        }
+                                            @if (!string.IsNullOrWhiteSpace(t.ThumbnailPath))
+                                            {
+                                                <div class="template-thumb">
+                                                    <img src="@t.ThumbnailPath" alt="@t.Name" loading="lazy" />
+                                                    @if (t.IsSystem)
+                                                    {
+                                                        <span class="badge text-bg-dark template-badge">System</span>
+                                                    }
+                                                    @{
+                                                        var ws = WorkspaceLabel(t.TenantId);
+                                                    }
+                                                    @if (!string.IsNullOrWhiteSpace(ws))
+                                                    {
+                                                        <span class="badge text-bg-secondary template-badge"
+                                                              style="left:auto; right:.5rem; max-width:60%; overflow:hidden; text-overflow:ellipsis;"
+                                                              title="@tenantNames[t.TenantId]">@ws</span>
+                                                    }
+                                                </div>
+                                            }
                                         <div class="template-body">
                                             <div class="fw-semibold">@t.Name</div>
                                             @if (!string.IsNullOrWhiteSpace(t.Description))

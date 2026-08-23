@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using DailyPosterGenerator.Data;
 using DailyPosterGenerator.Models;
 using DailyPosterGenerator.Services;
@@ -36,10 +36,16 @@ public class TemplatesController : Controller
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var templates = await db.PosterTemplates.AsNoTracking()
-            .Where(t => t.TenantId == _tenant.TenantId || t.TenantId == 0)
-            .OrderBy(t => t.TenantId == _tenant.TenantId ? 0 : 1)
+            .Where(t => _tenant.IsAdmin || t.TenantId == _tenant.TenantId || t.TenantId == 0)
+            .OrderBy(t => t.TenantId == _tenant.TenantId ? 0 : t.TenantId == 0 ? 1 : 2)
+            .ThenBy(t => t.TenantId)
             .ThenBy(t => t.Name)
             .ToListAsync(ct);
+
+        ViewBag.CurrentTenantId = _tenant.TenantId;
+        ViewBag.IsAdmin = _tenant.IsAdmin;
+        ViewBag.TenantNames = await db.Tenants.AsNoTracking()
+            .ToDictionaryAsync(x => x.Id, x => x.Name, ct);
 
         var changed = false;
         foreach (var t in templates)
@@ -191,7 +197,8 @@ public class TemplatesController : Controller
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var template = await db.PosterTemplates
-            .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == _tenant.TenantId && !t.IsSystem, ct);
+            .FirstOrDefaultAsync(t => t.Id == id && !t.IsSystem
+                && (t.TenantId == _tenant.TenantId || _tenant.IsAdmin), ct);
 
         if (template is null)
         {
@@ -270,7 +277,8 @@ public class TemplatesController : Controller
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var template = await db.PosterTemplates.AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == _tenant.TenantId && !t.IsSystem, ct);
+            .FirstOrDefaultAsync(t => t.Id == id && !t.IsSystem
+                && (t.TenantId == _tenant.TenantId || _tenant.IsAdmin), ct);
 
         // Legacy imports have no stored original; detect on the processed background.
         var sourcePath = template is null
@@ -332,7 +340,8 @@ public class TemplatesController : Controller
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var template = await db.PosterTemplates
-            .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == _tenant.TenantId && !t.IsSystem, ct);
+            .FirstOrDefaultAsync(t => t.Id == id && !t.IsSystem
+                && (t.TenantId == _tenant.TenantId || _tenant.IsAdmin), ct);
 
         if (template is null)
         {
@@ -350,7 +359,8 @@ public class TemplatesController : Controller
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var template = await db.PosterTemplates
-            .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == _tenant.TenantId && !t.IsSystem, ct);
+            .FirstOrDefaultAsync(t => t.Id == id && !t.IsSystem
+                && (t.TenantId == _tenant.TenantId || _tenant.IsAdmin), ct);
 
         if (template is null)
         {
@@ -365,7 +375,7 @@ public class TemplatesController : Controller
         }
 
         var duplicate = await db.PosterTemplates.AnyAsync(
-            t => t.Id != id && t.TenantId == _tenant.TenantId && t.Name == model.Name, ct);
+            t => t.Id != id && t.TenantId == template.TenantId && t.Name == model.Name, ct);
         if (duplicate)
         {
             ModelState.AddModelError(nameof(PosterTemplate.Name), "A template with this name already exists.");
@@ -423,7 +433,8 @@ public class TemplatesController : Controller
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var template = await db.PosterTemplates
-            .FirstOrDefaultAsync(t => t.Id == id && t.TenantId == _tenant.TenantId && !t.IsSystem, ct);
+            .FirstOrDefaultAsync(t => t.Id == id && !t.IsSystem
+                && (t.TenantId == _tenant.TenantId || _tenant.IsAdmin), ct);
 
         if (template is null)
         {

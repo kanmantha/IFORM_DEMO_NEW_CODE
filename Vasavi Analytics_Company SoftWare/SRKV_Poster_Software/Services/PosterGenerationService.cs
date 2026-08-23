@@ -16,6 +16,9 @@ public sealed class GenerateOptions
     public int TenantId { get; set; } = 1;
 
     public int? TemplateId { get; set; }
+
+    /// <summary>Admins may render posters on templates owned by any workspace.</summary>
+    public bool CrossTenant { get; set; }
 }
 
 public interface IPosterGenerationService
@@ -42,6 +45,7 @@ public interface IPosterGenerationService
         DateTime date,
         IReadOnlyList<EventItem> events,
         int tenantId,
+        bool crossTenant = false,
         CancellationToken ct = default);
 
     Task<bool> HasPosterForAsync(DateTime date, int tenantId = 1);
@@ -206,12 +210,14 @@ public class PosterGenerationService : IPosterGenerationService
         DateTime date,
         IReadOnlyList<EventItem> events,
         int tenantId,
+        bool crossTenant = false,
         CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var templates = await db.PosterTemplates.AsNoTracking()
-            .Where(t => t.IsActive && (t.TenantId == tenantId || t.TenantId == 0))
-            .OrderBy(t => t.TenantId == tenantId ? 0 : 1)
+            .Where(t => t.IsActive && (crossTenant || t.TenantId == tenantId || t.TenantId == 0))
+            .OrderBy(t => t.TenantId == tenantId ? 0 : t.TenantId == 0 ? 1 : 2)
+            .ThenBy(t => t.TenantId)
             .ThenBy(t => t.Id)
             .ToListAsync(ct);
 
@@ -317,15 +323,15 @@ public class PosterGenerationService : IPosterGenerationService
         }
 
         // No template chosen: prefer the tenant's own templates, then system
-        // templates for the tenant's sector, then any system template.
+        // templates, then (for admins) any other workspace's templates.
         await using var db2 = await _dbFactory.CreateDbContextAsync(ct);
         var tenant = await db2.Tenants.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == options.TenantId, ct);
         var sector = tenant?.Sector ?? Models.SectorCatalog.General;
 
         return await db2.PosterTemplates.AsNoTracking()
-            .Where(t => t.IsActive && (t.TenantId == options.TenantId || t.TenantId == 0))
-            .OrderBy(t => t.TenantId == options.TenantId ? 0 : 1)
+            .Where(t => t.IsActive && (options.CrossTenant || t.TenantId == options.TenantId || t.TenantId == 0))
+            .OrderBy(t => t.TenantId == options.TenantId ? 0 : t.TenantId == 0 ? 1 : 2)
             .ThenBy(t => t.TenantId == 0 && t.Sector == sector ? 0 : 1)
             .ThenBy(t => t.Id)
             .FirstOrDefaultAsync(ct);

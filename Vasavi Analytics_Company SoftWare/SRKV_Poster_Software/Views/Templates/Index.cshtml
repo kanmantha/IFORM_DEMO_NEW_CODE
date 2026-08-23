@@ -1,6 +1,15 @@
 @model List<PosterTemplate>
 @{
     ViewData["Title"] = "Templates";
+    var currentTenantId = (int)(ViewBag.CurrentTenantId ?? 1);
+    var isAdmin = (bool)(ViewBag.IsAdmin ?? false);
+    var tenantNames = ViewBag.TenantNames as Dictionary<int, string> ?? new Dictionary<int, string>();
+    string WorkspaceLabel(int tenantId)
+    {
+        if (tenantId == 0 || tenantId == currentTenantId) return string.Empty;
+        var name = tenantNames.TryGetValue(tenantId, out var n) ? n : $"Workspace {tenantId}";
+        return name.Length > 18 ? name[..17] + "…" : name;
+    }
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -33,8 +42,8 @@
                     {
                         <img src="@t.ThumbnailPath" alt="@t.Name" loading="lazy" />
                     }
-                    <span class="badge template-badge @(t.IsSystem ? "text-bg-dark" : "text-bg-primary")">
-                        @(t.IsSystem ? "System" : "Yours")
+                    <span class="badge template-badge @(t.IsSystem ? "text-bg-dark" : t.TenantId == currentTenantId ? "text-bg-primary" : "text-bg-secondary")">
+                        @(t.IsSystem ? "System" : t.TenantId == currentTenantId ? "Yours" : "Other")
                     </span>
                     @if (t.IsImported)
                     {
@@ -55,6 +64,13 @@
                         @if (!string.IsNullOrWhiteSpace(t.Sector))
                         {
                             <span class="text-secondary">·</span> @SectorCatalog.Label(t.Sector)
+                        }
+                        @{
+                            var ws = WorkspaceLabel(t.TenantId);
+                        }
+                        @if (!string.IsNullOrWhiteSpace(ws))
+                        {
+                            <span class="text-secondary">·</span> <span title="@tenantNames[t.TenantId]">@ws</span>
                         }
                     </div>
                     <div class="d-flex gap-2">

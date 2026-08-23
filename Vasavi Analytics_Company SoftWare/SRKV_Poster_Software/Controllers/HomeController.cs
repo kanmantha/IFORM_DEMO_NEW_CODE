@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using DailyPosterGenerator.Data;
 using DailyPosterGenerator.Models;
 using DailyPosterGenerator.Services;
@@ -102,6 +102,9 @@ public class HomeController : Controller
             SelectedTemplateId = templateId
         };
 
+        ViewBag.CurrentTenantId = _tenant.TenantId;
+        ViewBag.TenantNames = _tenant.IsAdmin ? await GetTenantNamesAsync(ct) : new Dictionary<int, string>();
+
         return View(vm);
     }
 
@@ -178,7 +181,7 @@ public class HomeController : Controller
         }
 
         var result = await _generation.GenerateAsync(date.Value, chosen,
-            new GenerateOptions { Persist = true, TenantId = _tenant.TenantId, TemplateId = templateId }, ct);
+            new GenerateOptions { Persist = true, TenantId = _tenant.TenantId, TemplateId = templateId, CrossTenant = _tenant.IsAdmin }, ct);
 
         if (!result.Success || result.Poster is null)
         {
@@ -203,13 +206,13 @@ public class HomeController : Controller
             chosen.Insert(0, new EventItem { Text = customEvent.Trim(), Kind = "event" });
         }
 
-        var result = await _generation.GenerateAllTemplatesAsync(date.Value, chosen, _tenant.TenantId, ct);
+        var result = await _generation.GenerateAllTemplatesAsync(date.Value, chosen, _tenant.TenantId, _tenant.IsAdmin, ct);
 
         if (result.Created == 0)
         {
             TempData["Notice"] = result.Errors.Count > 0
                 ? $"Bulk generation failed. First errors: {string.Join("; ", result.Errors.Take(3))}"
-                : $"Nothing to generate — every template already has a poster for {date.Value:dd MMM yyyy}.";
+                : $"Nothing to generate â€” every template already has a poster for {date.Value:dd MMM yyyy}.";
             return RedirectToAction(nameof(Events), new { date = date.Value.ToString("yyyy-MM-dd") });
         }
 
@@ -242,7 +245,7 @@ public class HomeController : Controller
 
         var events = await _events.GetTodaysEventsAsync(date, ct);
         var result = await _generation.GenerateAsync(date, events,
-            new GenerateOptions { Persist = true, TenantId = tenantId }, ct);
+            new GenerateOptions { Persist = true, TenantId = tenantId, CrossTenant = _tenant.IsAdmin }, ct);
 
         if (!result.Success || result.Poster is null)
         {
@@ -268,10 +271,18 @@ public class HomeController : Controller
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         return await db.PosterTemplates.AsNoTracking()
-            .Where(t => t.IsActive && (t.TenantId == _tenant.TenantId || t.TenantId == 0))
-            .OrderBy(t => t.TenantId == _tenant.TenantId ? 0 : 1)
+            .Where(t => t.IsActive && (_tenant.IsAdmin || t.TenantId == _tenant.TenantId || t.TenantId == 0))
+            .OrderBy(t => t.TenantId == _tenant.TenantId ? 0 : t.TenantId == 0 ? 1 : 2)
+            .ThenBy(t => t.TenantId)
             .ThenBy(t => t.Name)
             .ToListAsync(ct);
+    }
+
+    private async Task<Dictionary<int, string>> GetTenantNamesAsync(CancellationToken ct)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.Tenants.AsNoTracking()
+            .ToDictionaryAsync(x => x.Id, x => x.Name, ct);
     }
 
     private async Task<Poster?> GetTodaysPosterAsync(DateTime date, int tenantId, CancellationToken ct)
