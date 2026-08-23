@@ -192,6 +192,39 @@ public class HomeController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GenerateAll(string? customEvent, DateTime? date, CancellationToken ct = default)
+    {
+        date = (date ?? DateTime.Today).Date;
+
+        var events = await _events.GetTodaysEventsAsync(date.Value, ct);
+        var chosen = events.ToList();
+        if (!string.IsNullOrWhiteSpace(customEvent))
+        {
+            chosen.Insert(0, new EventItem { Text = customEvent.Trim(), Kind = "event" });
+        }
+
+        var result = await _generation.GenerateAllTemplatesAsync(date.Value, chosen, _tenant.TenantId, ct);
+
+        if (result.Created == 0)
+        {
+            TempData["Notice"] = result.Errors.Count > 0
+                ? $"Bulk generation failed. First errors: {string.Join("; ", result.Errors.Take(3))}"
+                : $"Nothing to generate — every template already has a poster for {date.Value:dd MMM yyyy}.";
+            return RedirectToAction(nameof(Events), new { date = date.Value.ToString("yyyy-MM-dd") });
+        }
+
+        var message = $"Created {result.Created} poster(s) across all templates";
+        if (result.Skipped > 0)
+        {
+            message += $" ({result.Skipped} already existed)";
+        }
+
+        TempData["Success"] = message + ".";
+        return RedirectToAction("Index", "Posters");
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> GenerateTodayAuto(CancellationToken ct = default)
     {
         var date = DateTime.Today;

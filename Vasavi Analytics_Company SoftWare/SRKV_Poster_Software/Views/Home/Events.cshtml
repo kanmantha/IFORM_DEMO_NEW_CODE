@@ -11,10 +11,18 @@
             Select the ones you want featured, then let AI write the copy and design the poster.
         </p>
     </div>
-    <form asp-action="GenerateTodayAuto" asp-controller="Home" method="post">
-        @Html.AntiForgeryToken()
-        <button type="submit" class="btn btn-gradient">Quick Generate</button>
-    </form>
+    <div class="d-flex gap-2 align-items-center">
+        <form asp-action="GenerateTodayAuto" asp-controller="Home" method="post">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-gradient">Quick Generate</button>
+        </form>
+        <form asp-action="GenerateAll" asp-controller="Home" method="post"
+              onsubmit="return confirm('Generate a poster on EVERY available template for this date?');">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="date" value="@Model.Date.ToString("yyyy-MM-dd")" />
+            <button type="submit" class="btn btn-success">Generate All Templates</button>
+        </form>
+    </div>
     <a asp-action="DownloadDay" asp-controller="Posters" asp-route-date="@Model.Date.ToString("yyyy-MM-dd")"
        class="btn btn-outline-secondary">Download Day's Posters</a>
 </div>

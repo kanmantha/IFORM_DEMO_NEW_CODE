@@ -6,6 +6,9 @@ namespace DailyPosterGenerator.Services;
 
 public record GenerationResult(bool Success, Poster? Poster, string? Error);
 
+/// <summary>Outcome of generating a poster on every available template at once.</summary>
+public record BulkGenerationResult(int Total, int Created, int Skipped, IReadOnlyList<string> Errors);
+
 public sealed class GenerateOptions
 {
     public bool Persist { get; set; } = true;
@@ -29,6 +32,16 @@ public interface IPosterGenerationService
         DateTime date,
         EventItem item,
         GenerateOptions? options = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Generates one poster per active template visible to the tenant for the given
+    /// date, skipping templates that already have a poster that day.
+    /// </summary>
+    Task<BulkGenerationResult> GenerateAllTemplatesAsync(
+        DateTime date,
+        IReadOnlyList<EventItem> events,
+        int tenantId,
         CancellationToken ct = default);
 
     Task<bool> HasPosterForAsync(DateTime date, int tenantId = 1);
@@ -187,6 +200,54 @@ public class PosterGenerationService : IPosterGenerationService
             _log.Add("error", $"Generation failed for {date:dd MMM yyyy}: {poster.EventTitle} ({ex.Message})");
             return new GenerationResult(false, poster, ex.Message);
         }
+    }
+
+    public async Task<BulkGenerationResult> GenerateAllTemplatesAsync(
+        DateTime date,
+        IReadOnlyList<EventItem> events,
+        int tenantId,
+        CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var templates = await db.PosterTemplates.AsNoTracking()
+            .Where(t => t.IsActive && (t.TenantId == tenantId || t.TenantId == 0))
+            .OrderBy(t => t.TenantId == tenantId ? 0 : 1)
+            .ThenBy(t => t.Id)
+            .ToListAsync(ct);
+
+        var existingTemplateIds = (await db.Posters.AsNoTracking()
+                .Where(p => p.EventDate == date.Date && p.TenantId == tenantId && p.TemplateId != null)
+                .Select(p => p.TemplateId!.Value)
+                .ToListAsync(ct))
+            .ToHashSet();
+
+        var created = 0;
+        var skipped = 0;
+        var errors = new List<string>();
+
+        foreach (var template in templates)
+        {
+            if (existingTemplateIds.Contains(template.Id))
+            {
+                skipped++;
+                continue;
+            }
+
+            var result = await GenerateAsync(date, events,
+                new GenerateOptions { Persist = true, TenantId = tenantId, TemplateId = template.Id }, ct);
+
+            if (result.Success)
+            {
+                created++;
+            }
+            else
+            {
+                errors.Add($"{template.Name}: {result.Error}");
+            }
+        }
+
+        _log.Add("generate", $"Bulk generation for {date:dd MMM yyyy}: {created} created, {skipped} skipped, {errors.Count} failed across {templates.Count} templates.");
+        return new BulkGenerationResult(templates.Count, created, skipped, errors);
     }
 
     public async Task<string?> RenderPreviewAsync(
