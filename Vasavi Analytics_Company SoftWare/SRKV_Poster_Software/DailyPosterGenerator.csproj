@@ -22,4 +22,10 @@
     <PackageReference Include="SkiaSharp" Version="4.151.1" />
   </ItemGroup>
 
+  <!-- A stale instance of the app locks bin\...\DailyPosterGenerator.dll and fails the copy step.
+       Before every build, run the shared stop-stale script so the output DLL is never locked. -->
+  <Target Name="StopStaleInstances" BeforeTargets="Build">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\.vscode\stop-stale.ps1&quot;" IgnoreExitCode="true" />
+  </Target>
+
 </Project>

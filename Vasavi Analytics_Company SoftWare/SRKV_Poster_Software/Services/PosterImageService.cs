@@ -593,8 +593,9 @@ public class SkiaSharpPosterImageService : IPosterImageService
             const float heroHeight = 460f;
             var heroRect = SKRect.Create(margin, heroTop, usable, heroHeight);
 
-            using var clip = new SKPath();
-            clip.AddRoundRect(heroRect, 28, 28);
+            var heroClipBuilder = new SKPathBuilder();
+            heroClipBuilder.AddRoundRect(heroRect, 28f, 28f, SKPathDirection.Clockwise);
+            using var clip = heroClipBuilder.Detach();
             canvas.Save();
             canvas.ClipPath(clip, SKClipOperation.Intersect, true);
             DrawCover(canvas, hero);
@@ -848,7 +849,7 @@ public class SkiaSharpPosterImageService : IPosterImageService
             using (var bmpCanvas = new SKCanvas(bmp))
             {
                 bmpCanvas.DrawColor(SKColors.White);
-                bmpCanvas.DrawImage(src, 0, 0);
+                bmpCanvas.DrawImage(src, 0f, 0f, SKSamplingOptions.Default);
             }
 
             var w = bmp.Width;
@@ -939,7 +940,7 @@ public class SkiaSharpPosterImageService : IPosterImageService
             {
                 var lampH = 168f;
                 var lampW = lampH * lamp.Width / lamp.Height;
-                canvas.DrawImage(lamp, SKRect.Create(128 - lampW / 2, 150 - lampH / 2, lampW, lampH));
+                canvas.DrawImage(lamp, SKRect.Create(128 - lampW / 2, 150 - lampH / 2, lampW, lampH), SKSamplingOptions.Default);
             }
             else
             {
@@ -953,7 +954,7 @@ public class SkiaSharpPosterImageService : IPosterImageService
             {
                 var bannerH = 150f;
                 var bannerW = bannerH * banner.Width / banner.Height;
-                canvas.DrawImage(banner, SKRect.Create(540 - bannerW / 2, 150 - bannerH / 2, bannerW, bannerH));
+                canvas.DrawImage(banner, SKRect.Create(540 - bannerW / 2, 150 - bannerH / 2, bannerW, bannerH), SKSamplingOptions.Default);
             }
             else
             {
@@ -965,7 +966,7 @@ public class SkiaSharpPosterImageService : IPosterImageService
         {
             if (vp is not null)
             {
-                canvas.DrawImage(vp, SKRect.Create(948 - 66, 88, 132, 132));
+                canvas.DrawImage(vp, SKRect.Create(948 - 66, 88, 132, 132), SKSamplingOptions.Default);
             }
             else
             {
@@ -1184,7 +1185,7 @@ public class SkiaSharpPosterImageService : IPosterImageService
             if (logo is not null)
             {
                 const float logoSize = 176f;
-                canvas.DrawImage(logo, SKRect.Create(70f, SrvHeight - logoSize - 30f, logoSize, logoSize));
+                canvas.DrawImage(logo, SKRect.Create(70f, SrvHeight - logoSize - 30f, logoSize, logoSize), SKSamplingOptions.Default);
             }
             else
             {
@@ -1237,8 +1238,9 @@ public class SkiaSharpPosterImageService : IPosterImageService
         using var shadow = new SKPaint { Color = new SKColor(0, 0, 0, 26), IsAntialias = true };
         canvas.DrawRoundRect(SKRect.Create(panel.Left + 5, panel.Top + 8, panel.Width, panel.Height), 20, 20, shadow);
 
-        using var path = new SKPath();
-        path.AddRoundRect(panel, 20, 20);
+        var heroPanelBuilder = new SKPathBuilder();
+        heroPanelBuilder.AddRoundRect(panel, 20f, 20f, SKPathDirection.Clockwise);
+        using var path = heroPanelBuilder.Detach();
 
         if (hero is not null)
         {
@@ -1248,7 +1250,7 @@ public class SkiaSharpPosterImageService : IPosterImageService
             var w = hero.Width * scale;
             var h = hero.Height * scale;
             var src = new SKRect(panel.Left + (panel.Width - w) / 2f, panel.Top + (panel.Height - h) / 2f, panel.Left + (panel.Width - w) / 2f + w, panel.Top + (panel.Height - h) / 2f + h);
-            canvas.DrawImage(hero, src);
+            canvas.DrawImage(hero, src, SKSamplingOptions.Default);
             canvas.Restore();
         }
         else
@@ -1276,20 +1278,22 @@ public class SkiaSharpPosterImageService : IPosterImageService
         canvas.DrawCircle(cx, cy, 34 * scale + 6, ring);
 
         using var bowl = new SKPaint { Color = gold, IsAntialias = true };
-        using var bowlPath = new SKPath();
-        bowlPath.MoveTo(cx - 30 * s, cy - 8 * s);
-        bowlPath.LineTo(cx + 30 * s, cy - 8 * s);
-        bowlPath.CubicTo(cx + 26 * s, cy + 14 * s, cx + 16 * s, cy + 26 * s, cx, cy + 26 * s);
-        bowlPath.CubicTo(cx - 16 * s, cy + 26 * s, cx - 26 * s, cy + 14 * s, cx - 30 * s, cy - 8 * s);
-        bowlPath.Close();
+        var bowlBuilder = new SKPathBuilder();
+        bowlBuilder.MoveTo(cx - 30 * s, cy - 8 * s);
+        bowlBuilder.LineTo(cx + 30 * s, cy - 8 * s);
+        bowlBuilder.CubicTo(cx + 26 * s, cy + 14 * s, cx + 16 * s, cy + 26 * s, cx, cy + 26 * s);
+        bowlBuilder.CubicTo(cx - 16 * s, cy + 26 * s, cx - 26 * s, cy + 14 * s, cx - 30 * s, cy - 8 * s);
+        bowlBuilder.Close();
+        using var bowlPath = bowlBuilder.Detach();
         canvas.DrawPath(bowlPath, bowl);
 
         using var flame = new SKPaint { Color = new SKColor(255, 158, 27), IsAntialias = true };
-        using var flamePath = new SKPath();
-        flamePath.MoveTo(cx, cy - 62 * s);
-        flamePath.CubicTo(cx + 14 * s, cy - 34 * s, cx + 13 * s, cy - 12 * s, cx, cy - 2 * s);
-        flamePath.CubicTo(cx - 13 * s, cy - 12 * s, cx - 14 * s, cy - 34 * s, cx, cy - 62 * s);
-        flamePath.Close();
+        var flameBuilder = new SKPathBuilder();
+        flameBuilder.MoveTo(cx, cy - 62 * s);
+        flameBuilder.CubicTo(cx + 14 * s, cy - 34 * s, cx + 13 * s, cy - 12 * s, cx, cy - 2 * s);
+        flameBuilder.CubicTo(cx - 13 * s, cy - 12 * s, cx - 14 * s, cy - 34 * s, cx, cy - 62 * s);
+        flameBuilder.Close();
+        using var flamePath = flameBuilder.Detach();
         canvas.DrawPath(flamePath, flame);
 
         using var wick = new SKPaint { Color = navy, IsAntialias = true };
@@ -1340,18 +1344,19 @@ public class SkiaSharpPosterImageService : IPosterImageService
         switch (index % 5)
         {
             case 0: // check
-                using (var path = new SKPath())
                 {
-                    path.MoveTo(cx - 4.5f, cy);
-                    path.LineTo(cx - 1f, cy + 4f);
-                    path.LineTo(cx + 5f, cy - 4f);
+                    var checkBuilder = new SKPathBuilder();
+                    checkBuilder.MoveTo(cx - 4.5f, cy);
+                    checkBuilder.LineTo(cx - 1f, cy + 4f);
+                    checkBuilder.LineTo(cx + 5f, cy - 4f);
+                    using var path = checkBuilder.Detach();
                     canvas.DrawPath(path, whiteStroke);
                 }
 
                 break;
             case 1: // star
-                using (var star = new SKPath())
                 {
+                    var starBuilder = new SKPathBuilder();
                     for (var k = 0; k < 5; k++)
                     {
                         var outer = Math.PI / 2 + k * 2 * Math.PI / 5;
@@ -1362,28 +1367,30 @@ public class SkiaSharpPosterImageService : IPosterImageService
                         var iy = cy + 3f * Math.Sin(inner);
                         if (k == 0)
                         {
-                            star.MoveTo((float)ox, (float)oy);
+                            starBuilder.MoveTo((float)ox, (float)oy);
                         }
                         else
                         {
-                            star.LineTo((float)ox, (float)oy);
+                            starBuilder.LineTo((float)ox, (float)oy);
                         }
 
-                        star.LineTo((float)ix, (float)iy);
+                        starBuilder.LineTo((float)ix, (float)iy);
                     }
 
-                    star.Close();
+                    starBuilder.Close();
+                    using var star = starBuilder.Detach();
                     canvas.DrawPath(star, whiteFill);
                 }
 
                 break;
             case 2: // heart
-                using (var heart = new SKPath())
                 {
-                    heart.MoveTo(cx, cy + 5f);
-                    heart.CubicTo(cx - 9f, cy - 3f, cx - 5f, cy - 9f, cx, cy - 3f);
-                    heart.CubicTo(cx + 5f, cy - 9f, cx + 9f, cy - 3f, cx, cy + 5f);
-                    heart.Close();
+                    var heartBuilder = new SKPathBuilder();
+                    heartBuilder.MoveTo(cx, cy + 5f);
+                    heartBuilder.CubicTo(cx - 9f, cy - 3f, cx - 5f, cy - 9f, cx, cy - 3f);
+                    heartBuilder.CubicTo(cx + 5f, cy - 9f, cx + 9f, cy - 3f, cx, cy + 5f);
+                    heartBuilder.Close();
+                    using var heart = heartBuilder.Detach();
                     canvas.DrawPath(heart, whiteFill);
                 }
 
@@ -1421,12 +1428,13 @@ public class SkiaSharpPosterImageService : IPosterImageService
                 canvas.DrawRect(SKRect.Create(cx - 7, cy - 7, 14, 14), paint);
                 break;
             case 3:
-                using (var tri = new SKPath())
                 {
-                    tri.MoveTo(cx, cy - 9);
-                    tri.LineTo(cx + 8, cy + 6);
-                    tri.LineTo(cx - 8, cy + 6);
-                    tri.Close();
+                    var triBuilder = new SKPathBuilder();
+                    triBuilder.MoveTo(cx, cy - 9);
+                    triBuilder.LineTo(cx + 8, cy + 6);
+                    triBuilder.LineTo(cx - 8, cy + 6);
+                    triBuilder.Close();
+                    using var tri = triBuilder.Detach();
                     canvas.DrawPath(tri, paint);
                 }
                 break;
@@ -1641,7 +1649,7 @@ public class SkiaSharpPosterImageService : IPosterImageService
             dest.Left - 10, dest.Top - 10, dest.Width + 20, dest.Height + 20, 14, 14, backing);
 
         using var paint = new SKPaint { IsAntialias = true };
-        canvas.DrawBitmap(logo, dest, paint);
+        canvas.DrawBitmap(logo, dest, SKSamplingOptions.Default, paint);
     }
 
     /// <summary>Previews are throwaway render caches; delete ones older than 24h. Best effort.</summary>

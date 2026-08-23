@@ -349,10 +349,11 @@ public class TemplateImportService : ITemplateImportService
                     var treated = ApplyTreatment(layout, storedTreatment);
                     if (!ReferenceEquals(treated, layout))
                     {
-                        using (layout)
-                        {
-                            layout = treated;
-                        }
+                        // Dispose the superseded image explicitly; assigning inside a using
+                        // statement would dispose the original anyway (CS0728).
+                        var superseded = layout;
+                        layout = treated;
+                        superseded.Dispose();
                     }
                 }
                 catch (Exception ex)
@@ -770,12 +771,12 @@ public class TemplateImportService : ITemplateImportService
 
             case "tint":
                 template.AccentColor = t.TintHex;
-                if (HexColor.TryParse(t.TintHex, out var tint) && HexColor.Luminance(tint) > 180f)
+                if (t.TintHex is not null && HexColor.TryParse(t.TintHex, out var tint) && HexColor.Luminance(tint) > 180f)
                 {
                     template.Theme = "light";
                 }
                 changed = true;
-                notes.Add($"accent colour set to {t.TintHex.ToUpperInvariant()}");
+                notes.Add($"accent colour set to {t.TintHex?.ToUpperInvariant()}");
                 break;
 
             case "grayscale":
@@ -987,7 +988,7 @@ public class TemplateImportService : ITemplateImportService
     {
         var info = new SKImageInfo(image.Width, image.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
         using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the treatment surface.");
-        surface.Canvas.DrawImage(image, 0, 0);
+        surface.Canvas.DrawImage(image, 0f, 0f, SKSamplingOptions.Default);
         using var pm = surface.PeekPixels() ?? throw new InvalidOperationException("Failed to read the treatment pixels.");
         var span = pm.GetPixelSpan();
         for (var i = 0; i + 3 < span.Length; i += 4)
@@ -1117,7 +1118,7 @@ public class TemplateImportService : ITemplateImportService
         using var blurred = CreateBlurred(seed2);
         using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the edit surface.");
         var canvas = surface.Canvas;
-        canvas.DrawImage(image, 0, 0);
+        canvas.DrawImage(image, 0f, 0f, SKSamplingOptions.Default);
 
         foreach (var box in erase)
         {
@@ -1144,7 +1145,7 @@ public class TemplateImportService : ITemplateImportService
     {
         using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the seed surface.");
         var canvas = surface.Canvas;
-        canvas.DrawImage(source, 0, 0);
+        canvas.DrawImage(source, 0f, 0f, SKSamplingOptions.Default);
         foreach (var box in erase)
         {
             var rect = PaddedRect(BoxRect(box, info.Width, info.Height), pad, info.Width, info.Height);
@@ -1172,7 +1173,7 @@ public class TemplateImportService : ITemplateImportService
         var info = new SKImageInfo(image.Width, image.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
         using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the blur surface.");
         using var paint = new SKPaint { ImageFilter = SKImageFilter.CreateBlur(sigma, sigma) };
-        surface.Canvas.DrawImage(image, 0, 0, paint);
+        surface.Canvas.DrawImage(image, 0f, 0f, SKSamplingOptions.Default, paint);
         return surface.Snapshot();
     }
 

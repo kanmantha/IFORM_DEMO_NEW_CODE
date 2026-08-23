@@ -111,6 +111,12 @@ public class TemplatesController : Controller
             return View(model);
         }
 
+        if (model.Upload is null || model.Upload.Length == 0)
+        {
+            ModelState.AddModelError(nameof(TemplateImportViewModel.Upload), "Choose an image file to upload.");
+            return View(model);
+        }
+
         var treatmentRequest = TemplateImportService.NormalizeTreatment(new PosterTreatmentRequest(
             model.TreatmentKind ?? "original",
             model.TintHex,
