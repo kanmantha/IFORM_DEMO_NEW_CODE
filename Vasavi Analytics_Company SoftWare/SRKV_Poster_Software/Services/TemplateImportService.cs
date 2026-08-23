@@ -1101,33 +1101,36 @@ public class TemplateImportService : ITemplateImportService
     /// </summary>
     private static SKImage ApplyBoxEdits(SKImage image, IReadOnlyList<ImportBox> boxes)
     {
-        var info = new SKImageInfo(image.Width, image.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
         var erase = boxes.Where(b => !b.IsKeep).ToList();
         if (erase.Count == 0)
         {
             return image;
         }
 
-        var pad = (int)Math.Clamp(BlurSigma(image) * 1.5f, 12f, 120f);
+        var info = new SKImageInfo(image.Width, image.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        var width = info.Width;
+        var height = info.Height;
 
-        using var sample = SKBitmap.FromImage(image);
-        using var seed1 = BuildSeed(image, sample, erase, pad, info);
-        using var seedBmp = SKBitmap.FromImage(seed1);
-        using var seed2 = BuildSeed(seed1, seedBmp, erase, pad, info);
+        using var bmp = SKBitmap.FromImage(image);
+        var pm = bmp.PeekPixels() ?? throw new InvalidOperationException("Failed to read the imported pixels.");
+        var span = pm.GetPixelSpan();
 
-        using var blurred = CreateBlurred(seed2);
-        using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the edit surface.");
-        var canvas = surface.Canvas;
-        canvas.DrawImage(image, 0f, 0f, SKSamplingOptions.Default);
-
+        var holes = new List<SKRect>();
         foreach (var box in erase)
         {
-            var rect = BoxRect(box, image.Width, image.Height);
-            canvas.Save();
-            canvas.ClipRect(rect);
-            canvas.DrawImage(blurred, rect, rect, SKSamplingOptions.Default, null);
-            canvas.Restore();
+            var rect = BoxRect(box, width, height);
+            // Grow each box so anti-aliased glyph edges and drop shadows land inside
+            // the refilled area instead of surviving as faint outlines.
+            var grow = MathF.Max(3f, MathF.Min(rect.Width, rect.Height) * 0.18f);
+            holes.Add(Grow(rect, grow, width, height));
         }
+
+        ContentAwareFill(span, width, height, UnionTouching(holes, MathF.Max(2f, MathF.Min(width, height) * 0.006f)));
+
+        using var edited = SKImage.FromBitmap(bmp);
+        using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the edit surface.");
+        var canvas = surface.Canvas;
+        canvas.DrawImage(edited, 0f, 0f, SKSamplingOptions.Default);
 
         foreach (var box in boxes.Where(b => b.IsKeep))
         {
@@ -1138,148 +1141,396 @@ public class TemplateImportService : ITemplateImportService
         return surface.Snapshot();
     }
 
-    /// <summary>Draws a copy of <paramref name="source"/> with every erase box's padded
-    /// area replaced by a gradient derived from that area's border ring.</summary>
-    private static SKImage BuildSeed(
-        SKImage source, SKBitmap ringSource, IReadOnlyList<ImportBox> erase, int pad, SKImageInfo info)
+    // ---------------------------------------------------- content-aware erase fill
+
+    /// <summary>
+    /// Replaces every masked region with content reconstructed from its surroundings
+    /// using a pull-push image pyramid, adds grain matched to the local noise level,
+    /// and blends the patch back through a feathered alpha edge so the edit is invisible.
+    /// </summary>
+    private static void ContentAwareFill(Span<byte> span, int width, int height, IReadOnlyList<SKRect> holes)
     {
-        using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the seed surface.");
-        var canvas = surface.Canvas;
-        canvas.DrawImage(source, 0f, 0f, SKSamplingOptions.Default);
-        foreach (var box in erase)
+        var n = width * height;
+        var mask = new bool[n];
+        foreach (var hole in holes)
         {
-            var rect = PaddedRect(BoxRect(box, info.Width, info.Height), pad, info.Width, info.Height);
-            using var shader = MakeFillShader(rect, SampleBorder(ringSource, rect));
-            using var paint = new SKPaint { Shader = shader, IsAntialias = true };
-            canvas.DrawRect(rect, paint);
+            MarkRect(mask, width, height, hole);
         }
 
-        return surface.Snapshot();
+        var originals = span.ToArray();
+
+        var r = new float[n];
+        var g = new float[n];
+        var b = new float[n];
+        var wgt = new float[n];
+        for (var i = 0; i < n; i++)
+        {
+            var o = i * 4;
+            r[i] = originals[o];
+            g[i] = originals[o + 1];
+            b[i] = originals[o + 2];
+            wgt[i] = mask[i] ? 0f : 1f;
+        }
+
+        PullPush(r, g, b, wgt, width, height);
+        AddMatchedGrain(r, g, b, mask, width, height, holes, originals);
+
+        var alpha = BuildFeatherAlpha(mask, width, height);
+        for (var i = 0; i < n; i++)
+        {
+            var a = alpha[i];
+            if (a <= 0f)
+            {
+                continue;
+            }
+
+            var o = i * 4;
+            span[o] = (byte)MathF.Round(a * r[i] + (1f - a) * originals[o]);
+            span[o + 1] = (byte)MathF.Round(a * g[i] + (1f - a) * originals[o + 1]);
+            span[o + 2] = (byte)MathF.Round(a * b[i] + (1f - a) * originals[o + 2]);
+        }
     }
 
-    private static SKRect PaddedRect(SKRect rect, int pad, int width, int height) =>
-        SKRect.Create(
-            Math.Max(0f, rect.Left - pad),
-            Math.Max(0f, rect.Top - pad),
-            Math.Min(width, rect.Right + pad) - Math.Max(0f, rect.Left - pad),
-            Math.Min(height, rect.Bottom + pad) - Math.Max(0f, rect.Top - pad));
-
-    private static float BlurSigma(SKImage image) =>
-        Math.Min(160f, Math.Max(24f, Math.Max(image.Width, image.Height) / 18f));
-
-    private static SKImage CreateBlurred(SKImage image)
+    /// <summary>Pull-push reconstruction: repeatedly average the image down (pull),
+    /// then walk back up filling unknown pixels from bilinearly interpolated coarser
+    /// guesses (push). Large holes inherit colour from far away instead of smearing.</summary>
+    private static void PullPush(float[] r, float[] g, float[] b, float[] wgt, int width, int height)
     {
-        var sigma = BlurSigma(image);
-        var info = new SKImageInfo(image.Width, image.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
-        using var surface = SKSurface.Create(info) ?? throw new InvalidOperationException("Failed to allocate the blur surface.");
-        using var paint = new SKPaint { ImageFilter = SKImageFilter.CreateBlur(sigma, sigma) };
-        surface.Canvas.DrawImage(image, 0f, 0f, SKSamplingOptions.Default, paint);
-        return surface.Snapshot();
+        var levels = new List<(float[] R, float[] G, float[] B, float[] W, int Wd, int Ht)>
+        {
+            (r, g, b, wgt, width, height)
+        };
+
+        while (levels[^1].Wd > 1 || levels[^1].Ht > 1)
+        {
+            var p = levels[^1];
+            var wd = Math.Max(1, p.Wd / 2);
+            var ht = Math.Max(1, p.Ht / 2);
+            var nr = new float[wd * ht];
+            var ng = new float[wd * ht];
+            var nb = new float[wd * ht];
+            var nw = new float[wd * ht];
+            for (var y = 0; y < ht; y++)
+            {
+                for (var x = 0; x < wd; x++)
+                {
+                    float sr = 0, sg = 0, sb = 0, sw = 0;
+                    for (var dy = 0; dy < 2; dy++)
+                    {
+                        for (var dx = 0; dx < 2; dx++)
+                        {
+                            var si = Math.Min(y * 2 + dy, p.Ht - 1) * p.Wd + Math.Min(x * 2 + dx, p.Wd - 1);
+                            var w = p.W[si];
+                            if (w <= 0)
+                            {
+                                continue;
+                            }
+
+                            sw += w;
+                            sr += w * p.R[si];
+                            sg += w * p.G[si];
+                            sb += w * p.B[si];
+                        }
+                    }
+
+                    if (sw > 0)
+                    {
+                        var di = y * wd + x;
+                        nr[di] = sr / sw;
+                        ng[di] = sg / sw;
+                        nb[di] = sb / sw;
+                        nw[di] = sw;
+                    }
+                }
+            }
+
+            levels.Add((nr, ng, nb, nw, wd, ht));
+        }
+
+        var top = levels[^1];
+        float tr = 0, tg = 0, tb = 0, tw = 0;
+        for (var i = 0; i < top.W.Length; i++)
+        {
+            if (top.W[i] > 0)
+            {
+                tw += top.W[i];
+                tr += top.R[i] * top.W[i];
+                tg += top.G[i] * top.W[i];
+                tb += top.B[i] * top.W[i];
+            }
+        }
+
+        if (tw <= 0)
+        {
+            tr = tg = tb = 128f;
+            tw = 1f;
+        }
+
+        for (var i = 0; i < top.W.Length; i++)
+        {
+            if (top.W[i] <= 0)
+            {
+                top.R[i] = tr / tw;
+                top.G[i] = tg / tw;
+                top.B[i] = tb / tw;
+                top.W[i] = 1f;
+            }
+        }
+
+        for (var li = levels.Count - 2; li >= 0; li--)
+        {
+            var f = levels[li];
+            var c = levels[li + 1];
+            for (var y = 0; y < f.Ht; y++)
+            {
+                for (var x = 0; x < f.Wd; x++)
+                {
+                    var fi = y * f.Wd + x;
+                    if (f.W[fi] > 0)
+                    {
+                        continue;
+                    }
+
+                    var cx = (x + 0.5f) / 2f - 0.5f;
+                    var cy = (y + 0.5f) / 2f - 0.5f;
+                    var x0 = (int)MathF.Floor(cx);
+                    var y0 = (int)MathF.Floor(cy);
+                    var tx = cx - x0;
+                    var ty = cy - y0;
+                    float sr = 0, sg = 0, sb = 0, sw = 0;
+                    for (var dy = 0; dy <= 1; dy++)
+                    {
+                        for (var dx = 0; dx <= 1; dx++)
+                        {
+                            var ci = Math.Clamp(y0 + dy, 0, c.Ht - 1) * c.Wd + Math.Clamp(x0 + dx, 0, c.Wd - 1);
+                            var w = c.W[ci] * (dx == 0 ? 1f - tx : tx) * (dy == 0 ? 1f - ty : ty);
+                            if (w <= 0)
+                            {
+                                continue;
+                            }
+
+                            sw += w;
+                            sr += w * c.R[ci];
+                            sg += w * c.G[ci];
+                            sb += w * c.B[ci];
+                        }
+                    }
+
+                    if (sw > 0)
+                    {
+                        f.R[fi] = sr / sw;
+                        f.G[fi] = sg / sw;
+                        f.B[fi] = sb / sw;
+                        f.W[fi] = 1f;
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>Sprinkles gaussian noise into the filled areas with an amplitude taken
+    /// from the ring of original pixels around each hole, so patches share the
+    /// background's texture instead of looking airbrushed. Seeded for determinism.</summary>
+    private static void AddMatchedGrain(
+        float[] r, float[] g, float[] b, bool[] mask, int width, int height,
+        IReadOnlyList<SKRect> holes, byte[] originals)
+    {
+        var rng = new Random(20260823);
+        foreach (var hole in holes)
+        {
+            var (sr, sg, sb) = RingNoise(originals, width, height, hole);
+            if (sr <= 0f && sg <= 0f && sb <= 0f)
+            {
+                continue;
+            }
+
+            var x0 = Math.Max(0, (int)hole.Left);
+            var x1 = Math.Min(width - 1, (int)MathF.Ceiling(hole.Right) - 1);
+            var y0 = Math.Max(0, (int)hole.Top);
+            var y1 = Math.Min(height - 1, (int)MathF.Ceiling(hole.Bottom) - 1);
+            for (var y = y0; y <= y1; y++)
+            {
+                for (var x = x0; x <= x1; x++)
+                {
+                    var i = y * width + x;
+                    if (!mask[i])
+                    {
+                        continue;
+                    }
+
+                    r[i] = Math.Clamp(r[i] + Grain(rng) * sr, 0f, 255f);
+                    g[i] = Math.Clamp(g[i] + Grain(rng) * sg, 0f, 255f);
+                    b[i] = Math.Clamp(b[i] + Grain(rng) * sb, 0f, 255f);
+                }
+            }
+        }
+    }
+
+    /// <summary>Per-channel standard deviation of the band of original pixels just
+    /// outside <paramref name="rect"/> - zero when the surrounding area is flat.</summary>
+    private static (float R, float G, float B) RingNoise(byte[] px, int width, int height, SKRect rect)
+    {
+        var thick = Math.Max(3, (int)(Math.Min(rect.Width, rect.Height) * 0.08f));
+        var x0 = Math.Max(0, (int)rect.Left - thick);
+        var x1 = Math.Min(width - 1, (int)rect.Right + thick);
+        var y0 = Math.Max(0, (int)rect.Top - thick);
+        var y1 = Math.Min(height - 1, (int)rect.Bottom + thick);
+        var ix0 = Math.Max(0, (int)rect.Left);
+        var ix1 = Math.Min(width - 1, (int)MathF.Ceiling(rect.Right) - 1);
+        var iy0 = Math.Max(0, (int)rect.Top);
+        var iy1 = Math.Min(height - 1, (int)MathF.Ceiling(rect.Bottom) - 1);
+
+        double sr = 0, sg = 0, sb = 0, qr = 0, qg = 0, qb = 0;
+        long count = 0;
+        for (var y = y0; y <= y1; y++)
+        {
+            for (var x = x0; x <= x1; x++)
+            {
+                if (x >= ix0 && x <= ix1 && y >= iy0 && y <= iy1)
+                {
+                    continue;
+                }
+
+                var o = (y * width + x) * 4;
+                sr += px[o];
+                qr += (double)px[o] * px[o];
+                sg += px[o + 1];
+                qg += (double)px[o + 1] * px[o + 1];
+                sb += px[o + 2];
+                qb += (double)px[o + 2] * px[o + 2];
+                count++;
+            }
+        }
+
+        if (count < 16)
+        {
+            return (0f, 0f, 0f);
+        }
+
+        return (
+            MathF.Sqrt(MathF.Max(0f, (float)(qr / count - (sr / count) * (sr / count)))),
+            MathF.Sqrt(MathF.Max(0f, (float)(qg / count - (sg / count) * (sg / count)))),
+            MathF.Sqrt(MathF.Max(0f, (float)(qb / count - (sb / count) * (sb / count)))));
+    }
+
+    private static float Grain(Random rng) =>
+        (float)(rng.NextDouble() + rng.NextDouble() + rng.NextDouble() - 1.5) * 1.4f;
+
+    /// <summary>1 inside the holes, blurred a few pixels so the composite edge fades
+    /// out instead of ending on a hard rectangle border.</summary>
+    private static float[] BuildFeatherAlpha(bool[] mask, int width, int height)
+    {
+        var alpha = new float[mask.Length];
+        for (var i = 0; i < mask.Length; i++)
+        {
+            alpha[i] = mask[i] ? 1f : 0f;
+        }
+
+        BoxBlur(alpha, width, height);
+        BoxBlur(alpha, width, height);
+        return alpha;
+    }
+
+    private static void BoxBlur(float[] v, int width, int height)
+    {
+        const int rad = 2;
+        var tmp = new float[v.Length];
+        for (var y = 0; y < height; y++)
+        {
+            var row = y * width;
+            for (var x = 0; x < width; x++)
+            {
+                float sum = 0;
+                var n = 0;
+                for (var d = -rad; d <= rad; d++)
+                {
+                    var xx = x + d;
+                    if ((uint)xx < (uint)width)
+                    {
+                        sum += v[row + xx];
+                        n++;
+                    }
+                }
+
+                tmp[row + x] = sum / n;
+            }
+        }
+
+        for (var x = 0; x < width; x++)
+        {
+            for (var y = 0; y < height; y++)
+            {
+                float sum = 0;
+                var n = 0;
+                for (var d = -rad; d <= rad; d++)
+                {
+                    var yy = y + d;
+                    if ((uint)yy < (uint)height)
+                    {
+                        sum += tmp[yy * width + x];
+                        n++;
+                    }
+                }
+
+                v[y * width + x] = sum / n;
+            }
+        }
+    }
+
+    private static SKRect Grow(SKRect rect, float amount, int width, int height) =>
+        SKRect.Create(
+            MathF.Max(0f, rect.Left - amount),
+            MathF.Max(0f, rect.Top - amount),
+            MathF.Min(width, rect.Right + amount) - MathF.Max(0f, rect.Left - amount),
+            MathF.Min(height, rect.Bottom + amount) - MathF.Max(0f, rect.Top - amount));
+
+    /// <summary>Unions rectangles whose gap is smaller than <paramref name="gap"/> so
+    /// neighbouring detections refill as one continuous patch without seams.</summary>
+    private static List<SKRect> UnionTouching(List<SKRect> rects, float gap)
+    {
+        var merged = new List<SKRect>(rects);
+        var changed = true;
+        while (changed)
+        {
+            changed = false;
+            for (var i = 0; i < merged.Count && !changed; i++)
+            {
+                for (var j = i + 1; j < merged.Count; j++)
+                {
+                    if (!Grow(merged[i], gap, int.MaxValue, int.MaxValue).IntersectsWith(merged[j]))
+                    {
+                        continue;
+                    }
+
+                    merged[i] = SKRect.Union(merged[i], merged[j]);
+                    merged.RemoveAt(j);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        return merged;
+    }
+
+    private static void MarkRect(bool[] mask, int width, int height, SKRect rect)
+    {
+        var x0 = Math.Max(0, (int)rect.Left);
+        var x1 = Math.Min(width - 1, (int)MathF.Ceiling(rect.Right) - 1);
+        var y0 = Math.Max(0, (int)rect.Top);
+        var y1 = Math.Min(height - 1, (int)MathF.Ceiling(rect.Bottom) - 1);
+        for (var y = y0; y <= y1; y++)
+        {
+            var row = y * width;
+            for (var x = x0; x <= x1; x++)
+            {
+                mask[row + x] = true;
+            }
+        }
     }
 
     private static SKRect BoxRect(ImportBox box, int width, int height) =>
         SKRect.Create(box.X * width, box.Y * height, box.W * width, box.H * height);
-
-    /// <summary>Robust average of a pixel set: drops the extreme 12.5% on each side so
-    /// a few glyph pixels touching the ring do not skew the background colour.</summary>
-    private static SKColor TrimmedMean(IReadOnlyList<SKColor> pixels)
-    {
-        if (pixels.Count == 0)
-        {
-            return new SKColor(0, 0, 0);
-        }
-
-        static int Center(List<int> l)
-        {
-            var skip = l.Count / 8;
-            if (l.Count - 2 * skip < 2)
-            {
-                return l[l.Count / 2];
-            }
-
-            return (int)Math.Round(l.Skip(skip).Take(l.Count - 2 * skip).Average());
-        }
-
-        return new SKColor(
-            (byte)Center(pixels.Select(p => (int)p.Red).OrderBy(v => v).ToList()),
-            (byte)Center(pixels.Select(p => (int)p.Green).OrderBy(v => v).ToList()),
-            (byte)Center(pixels.Select(p => (int)p.Blue).OrderBy(v => v).ToList()));
-    }
-
-    /// <summary>Samples the band of pixels just outside each edge of <paramref name="rect"/>.</summary>
-    private static (SKColor Top, SKColor Bottom, SKColor Left, SKColor Right) SampleBorder(SKBitmap bmp, SKRect rect)
-    {
-        var thick = Math.Max(4, (int)Math.Min(24, Math.Min(rect.Width, rect.Height) * 0.05));
-        var x0 = Math.Max(0, (int)rect.Left);
-        var x1 = Math.Min(bmp.Width - 1, (int)rect.Right);
-        var y0 = Math.Max(0, (int)rect.Top);
-        var y1 = Math.Min(bmp.Height - 1, (int)rect.Bottom);
-
-        var top = new List<SKColor>();
-        var bottom = new List<SKColor>();
-        var left = new List<SKColor>();
-        var right = new List<SKColor>();
-        for (var x = x0; x <= x1; x++)
-        {
-            for (var k = 1; k <= thick; k++)
-            {
-                if (y0 - k >= 0)
-                {
-                    top.Add(bmp.GetPixel(x, y0 - k));
-                }
-
-                if (y1 + k < bmp.Height)
-                {
-                    bottom.Add(bmp.GetPixel(x, y1 + k));
-                }
-            }
-        }
-
-        for (var y = y0; y <= y1; y++)
-        {
-            for (var k = 1; k <= thick; k++)
-            {
-                if (x0 - k >= 0)
-                {
-                    left.Add(bmp.GetPixel(x0 - k, y));
-                }
-
-                if (x1 + k < bmp.Width)
-                {
-                    right.Add(bmp.GetPixel(x1 + k, y));
-                }
-            }
-        }
-
-        // Sides that fall outside the image (box flush to an edge) fall back to the
-        // overall ring colour instead of an arbitrary black.
-        var overall = TrimmedMean(top.Concat(bottom).Concat(left).Concat(right).ToList());
-        return (
-            top.Count > 0 ? TrimmedMean(top) : overall,
-            bottom.Count > 0 ? TrimmedMean(bottom) : overall,
-            left.Count > 0 ? TrimmedMean(left) : overall,
-            right.Count > 0 ? TrimmedMean(right) : overall);
-    }
-
-    /// <summary>Builds a fill for an erase box: a vertical or horizontal gradient from the
-    /// ring colours (whichever axis varies more), or a solid colour when the ring is flat.</summary>
-    private static SKShader MakeFillShader(SKRect rect, (SKColor Top, SKColor Bottom, SKColor Left, SKColor Right) border)
-    {
-        var vertical = ColorDist(border.Top, border.Bottom) >= ColorDist(border.Left, border.Right);
-        var c0 = vertical ? border.Top : border.Left;
-        var c1 = vertical ? border.Bottom : border.Right;
-        if (ColorDist(c0, c1) < 10)
-        {
-            return SKShader.CreateColor(c0);
-        }
-
-        var p0 = vertical ? new SKPoint(rect.MidX, rect.Top) : new SKPoint(rect.Left, rect.MidY);
-        var p1 = vertical ? new SKPoint(rect.MidX, rect.Bottom) : new SKPoint(rect.Right, rect.MidY);
-        return SKShader.CreateLinearGradient(p0, p1, new[] { c0, c1 }, null, SKShaderTileMode.Clamp);
-    }
-
-    private static float ColorDist(SKColor a, SKColor b) =>
-        MathF.Sqrt(MathF.Pow(a.Red - b.Red, 2) + MathF.Pow(a.Green - b.Green, 2) + MathF.Pow(a.Blue - b.Blue, 2));
 
     private static string BuildRegionsJson(IReadOnlyList<ImportBox> boxes)
     {
@@ -1420,8 +1671,53 @@ public class TemplateImportService : ITemplateImportService
         var candidates = new List<ImportBox>();
         candidates.AddRange(DetectTextBlocksAtScale(image, 96, logoBoxes));
         candidates.AddRange(DetectTextBlocksAtScale(image, 192, logoBoxes));
-        return MergeBoxes(candidates);
+        return MergeLineFragments(MergeBoxes(candidates));
     }
+
+    /// <summary>Unions erase boxes separated only by a sliver of background (letter
+    /// columns or line fragments of one heading) so they refill as a single seamless
+    /// patch instead of two neighbouring rectangles with different fills.</summary>
+    private static List<ImportBox> MergeLineFragments(List<ImportBox> boxes)
+    {
+        const float gap = 0.015f;
+        var changed = true;
+        while (changed)
+        {
+            changed = false;
+            for (var i = 0; i < boxes.Count && !changed; i++)
+            {
+                for (var j = i + 1; j < boxes.Count; j++)
+                {
+                    if (!GapTouch(boxes[i], boxes[j], gap))
+                    {
+                        continue;
+                    }
+
+                    var x1 = MathF.Min(boxes[i].X, boxes[j].X);
+                    var y1 = MathF.Min(boxes[i].Y, boxes[j].Y);
+                    var x2 = MathF.Max(boxes[i].X + boxes[i].W, boxes[j].X + boxes[j].W);
+                    var y2 = MathF.Max(boxes[i].Y + boxes[i].H, boxes[j].Y + boxes[j].H);
+                    boxes[i] = new ImportBox
+                    {
+                        Type = boxes[i].Type,
+                        X = Round3(x1),
+                        Y = Round3(y1),
+                        W = Round3(x2 - x1),
+                        H = Round3(y2 - y1)
+                    };
+                    boxes.RemoveAt(j);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        return boxes;
+    }
+
+    private static bool GapTouch(ImportBox a, ImportBox b, float gap) =>
+        a.X - gap < b.X + b.W && b.X - gap < a.X + a.W &&
+        a.Y - gap < b.Y + b.H && b.Y - gap < a.Y + a.H;
 
     private static IReadOnlyList<ImportBox> DetectTextBlocksAtScale(
         SKImage image, int targetWidth, IReadOnlyList<ImportBox> logoBoxes)
