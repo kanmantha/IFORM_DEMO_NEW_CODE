@@ -15,7 +15,7 @@
     <div>
         <h1 class="mb-1">Generate Today's Poster</h1>
         <p class="text-muted mb-0">
-            Events detected for <strong>@Model.Date.ToString("dddd, MMMM d, yyyy")</strong>.
+            Events detected for <strong id="dateLabel">@Model.Date.ToString("dddd, MMMM d, yyyy")</strong>.
             Select the ones you want featured, then let AI write the copy and design the poster.
         </p>
     </div>
@@ -124,7 +124,7 @@
             </span>
         </div>
         <div class="card-body">
-            <div class="list-group">
+            <div class="list-group" id="eventList">
                 @for (var i = 0; i < Model.Events.Count; i++)
                 {
                     var item = Model.Events[i];
@@ -164,18 +164,54 @@
 @section Scripts {
     <script>
         (function () {
-            const checks = document.querySelectorAll('.event-check');
+            const listEl = document.getElementById('eventList');
             const counter = document.getElementById('selectedCount');
-            const update = () => {
-                const count = Array.from(checks).filter(c => c.checked).length;
-                counter.textContent = count;
-            };
-            checks.forEach(c => c.addEventListener('change', update));
-
             const picker = document.getElementById('datePicker');
+
+            const checkedBoxes = () => Array.from(listEl.querySelectorAll('.event-check'));
+            const update = () => {
+                counter.textContent = checkedBoxes().filter(c => c.checked).length;
+            };
+
+            const escapeHtml = s => String(s).replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[ch]));
+
+            const renderEvents = (data) => {
+                listEl.innerHTML = (data.events || []).map((e, i) => {
+                    const year = e.year ? '<span class="badge text-bg-dark ms-2">' + escapeHtml(e.year) + '</span>' : '';
+                    const link = e.url ? '<a href="' + escapeHtml(e.url) + '" target="_blank" rel="noopener" class="stretched-link"></a>' : '';
+                    return '<label class="list-group-item list-group-item-action">'
+                        + '<input class="form-check-input me-2 event-check" type="checkbox" name="selectedEvents" value="' + i + '" checked />'
+                        + '<span class="badge text-bg-light me-2">' + escapeHtml(e.kind || 'event') + '</span>'
+                        + '<span class="fw-semibold">' + escapeHtml(e.text) + '</span>'
+                        + year + link
+                        + '</label>';
+                }).join('');
+            };
+
+            // Delegated listeners survive the list being re-rendered for a new date.
+            listEl.addEventListener('change', () => {
+                update();
+                schedule();
+            });
+
+            // Switching the date refreshes the event checklist in place — anything typed
+            // into the headline box is kept, and the live preview follows along.
             if (picker) {
-                picker.addEventListener('change', () => {
-                    if (picker.value) {
+                picker.addEventListener('change', async () => {
+                    if (!picker.value) return;
+                    try {
+                        const r = await fetch('/Home/EventsList?date=' + encodeURIComponent(picker.value), { cache: 'no-store' });
+                        if (!r.ok) throw new Error('events load failed');
+                        const data = await r.json();
+                        renderEvents(data);
+                        document.getElementById('dateLabel').textContent =
+                            new Date(data.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                        dateInput.value = data.date;
+                        update();
+                        schedule();
+                    } catch {
                         window.location.href = '@Url.Action("Events", "Home")' + '?date=' + encodeURIComponent(picker.value);
                     }
                 });
@@ -189,11 +225,10 @@
             let timer = null;
             let requestSeq = 0;
 
-            const selectedEvents = () => {
-                const ids = [];
-                checks.forEach((c, i) => { if (c.checked) ids.push(i); });
-                return ids.join(',');
-            };
+            const selectedEvents = () => checkedBoxes()
+                .filter(c => c.checked)
+                .map(c => c.value)
+                .join(',');
 
             const refreshPreview = () => {
                 const tpl = Array.from(radios).find(r => r.checked);
@@ -242,7 +277,6 @@
                 if (label) label.classList.add('selected');
                 schedule();
             }));
-            checks.forEach(c => c.addEventListener('change', schedule));
             if (customInput) customInput.addEventListener('input', schedule);
 
             refreshPreview();

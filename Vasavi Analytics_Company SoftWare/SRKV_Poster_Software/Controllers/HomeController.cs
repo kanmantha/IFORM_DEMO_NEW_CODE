@@ -108,6 +108,25 @@ public class HomeController : Controller
         return View(vm);
     }
 
+    /// <summary>
+    /// JSON feed powering the Generate page's live date switch: returns the events
+    /// for the requested day so the checklist can refresh without a full reload.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> EventsList(DateTime? date, CancellationToken ct = default)
+    {
+        date = (date ?? DateTime.Today).Date;
+        var items = await _events.GetTodaysEventsAsync(date.Value, ct);
+
+        return Json(new
+        {
+            date = date.Value.ToString("yyyy-MM-dd"),
+            pretty = date.Value.ToString("dddd, MMMM d, yyyy"),
+            fromApi = items.Count > 0,
+            events = items.Take(10).Select(e => new { e.Text, e.Year, e.Kind, e.Url })
+        });
+    }
+
     [HttpGet]
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public async Task<IActionResult> Preview(DateTime? date, int? templateId, string? events, string? customEvent, CancellationToken ct = default)
