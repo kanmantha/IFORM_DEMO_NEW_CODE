@@ -1,11 +1,11 @@
-﻿FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+﻿FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
 WORKDIR /src
 COPY . .
 WORKDIR "/src/Vasavi Analytics_Company SoftWare/SRKV_Poster_Software"
 RUN dotnet restore
 RUN dotnet publish -c Release -o /app/publish --no-restore
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-preview
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libfontconfig1 libharfbuzz0b libfreetype6 libjpeg62-turbo \
     libpng16-16 libtiff5 libwebp7 libgif7 fonts-dejavu-core \
