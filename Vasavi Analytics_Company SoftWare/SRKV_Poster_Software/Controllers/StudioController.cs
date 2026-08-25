@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using DailyPosterGenerator.Data;
 using DailyPosterGenerator.Models;
 using DailyPosterGenerator.Services;
@@ -42,6 +43,64 @@ public class StudioController : Controller
         }
 
         return View();
+    }
+
+    /// <summary>
+    /// Returns short occasion-prompt suggestions that match the given poster date,
+    /// so the Studio's suggestion chips reflect what is actually being celebrated.
+    /// </summary>
+    [HttpGet]
+    public IActionResult Occasions(DateTime date)
+    {
+        return Json(BuildOccasionSuggestions(date.Date));
+    }
+
+    private static List<string> BuildOccasionSuggestions(DateTime date)
+    {
+        var events = OfflineEventCalendar.GetEvents(date, 8);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var suggestions = new List<string>();
+
+        foreach (var ev in events)
+        {
+            if (ev.Kind != "holiday") continue;
+            var label = ShortOccasionLabel(ev.Text);
+            if (label is not null && seen.Add(label))
+            {
+                suggestions.Add(label);
+            }
+
+            if (suggestions.Count >= 6)
+            {
+                break;
+            }
+        }
+
+        // Quiet dates still deserve a couple of usable prompt ideas.
+        if (suggestions.Count < 3)
+        {
+            foreach (var extra in new[]
+            {
+                $"{date:MMM d} poster",
+                $"{date.DayOfWeek} special",
+                "Today's offer"
+            })
+            {
+                if (seen.Add(extra))
+                {
+                    suggestions.Add(extra);
+                }
+            }
+        }
+
+        return suggestions.Take(6).ToList();
+    }
+
+    private static string? ShortOccasionLabel(string text)
+    {
+        text = Regex.Replace(text, @"^\d{3,4}:\s*", "").Trim();
+        var head = text.Split(',')[0].Trim().TrimEnd('.').Trim();
+        return head.Length is > 0 and <= 40 ? head : null;
     }
 
     /// <summary>

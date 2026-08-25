@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Diagnostics;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using DailyPosterGenerator.Data;
 using DailyPosterGenerator.Models;
 using DailyPosterGenerator.Services;
@@ -18,17 +19,31 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Database (SQL Server via EF Core).
+// Database: SQL Server locally, SQLite on Render (or when DATABASE_URL is set).
+var useSqlite = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DATABASE_URL"))
+    || builder.Configuration.GetValue<bool>("UseSqlite");
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Server=(localdb)\\MSSQLLocalDB;Database=DailyPosterGenerator;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true";
 
-// The factory is the single source of truth for DbContextOptions (avoids scoped/singleton
-// conflicts when both scoped contexts and long-lived background services need EF Core).
-builder.Services.AddDbContextFactory<DailyPosterDbContext>(options =>
-    options.UseSqlServer(connectionString));
-
-builder.Services.AddScoped<DailyPosterDbContext>(sp =>
-    sp.GetRequiredService<IDbContextFactory<DailyPosterDbContext>>().CreateDbContext());
+if (useSqlite)
+{
+    var dbPath = Path.Combine(builder.Environment.ContentRootPath, "data", "poster.db");
+    Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+    var sqliteConn = $"Data Source={dbPath}";
+    builder.Services.AddDbContextFactory<DailyPosterDbContext>(options =>
+        options.UseSqlite(sqliteConn));
+    builder.Services.AddScoped<DailyPosterDbContext>(sp =>
+        sp.GetRequiredService<IDbContextFactory<DailyPosterDbContext>>().CreateDbContext());
+}
+else
+{
+    // The factory is the single source of truth for DbContextOptions (avoids scoped/singleton
+    // conflicts when both scoped contexts and long-lived background services need EF Core).
+    builder.Services.AddDbContextFactory<DailyPosterDbContext>(options =>
+        options.UseSqlServer(connectionString));
+    builder.Services.AddScoped<DailyPosterDbContext>(sp =>
+        sp.GetRequiredService<IDbContextFactory<DailyPosterDbContext>>().CreateDbContext());
+}
 
 builder.Services.AddHttpClient();
 
@@ -42,6 +57,12 @@ if (jwtSigningKey.Length < 32)
 {
     throw new InvalidOperationException("Jwt:SigningKey must be configured with at least 32 characters.");
 }
+
+// Persist data-protection keys next to the app so login cookies survive restarts. With
+// ephemeral keys every rebuild logs everyone out, which looks like "the UI is broken".
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, ".dp-keys")))
+    .SetApplicationName("DailyPosterGenerator");
 
 builder.Services.AddAuthentication(options =>
     {
@@ -190,13 +211,22 @@ if (app.Environment.IsDevelopment())
             return;
         }
 
+        // When launched from VS Code (F5), the debugger attaches first and serverReadyAction
+        // in launch.json opens Chrome.  Skip the app-side opener only when launched from the
+        // command line with a debugger manually attached (e.g. `dotnet attach`), NOT when
+        // running from Visual Studio or VS Code IDE which do not auto-open the browser.
+        if (Environment.GetEnvironmentVariable("TERM_PROGRAM") == "vscode")
+        {
+            return;
+        }
+
         browserOpened = true;
         try
         {
             var target = app.Urls.FirstOrDefault(u => u.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
                          ?? app.Urls.FirstOrDefault()
                          ?? "http://localhost:5011";
-            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+            OpenUiInChrome(target);
         }
         catch (Exception ex)
         {
@@ -206,6 +236,28 @@ if (app.Environment.IsDevelopment())
 }
 
 app.Run();
+
+// Opens the poster UI in a visible Chrome window (the team's browser of choice), falling back
+// to the Windows default browser when Chrome is not installed.
+static void OpenUiInChrome(string url)
+{
+    string[] chromeCandidates =
+    [
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Google", "Chrome", "Application", "chrome.exe"),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Google", "Chrome", "Application", "chrome.exe"),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Google", "Chrome", "Application", "chrome.exe"),
+    ];
+
+    var chrome = chromeCandidates.FirstOrDefault(File.Exists);
+    if (chrome is not null)
+    {
+        // --new-window forces a separate, focused Chrome window instead of a background tab.
+        Process.Start(new ProcessStartInfo(chrome) { Arguments = $"--new-window {url}", UseShellExecute = false });
+        return;
+    }
+
+    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+}
 
 // Returns every port the app is configured to listen on (multiple URLs may be
 // separated by ';', e.g. "https://localhost:7238;http://localhost:5011").

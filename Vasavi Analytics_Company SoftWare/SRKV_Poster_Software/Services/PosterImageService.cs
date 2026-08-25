@@ -11,7 +11,7 @@ namespace DailyPosterGenerator.Services;
 
 public interface IPosterImageService
 {
-    Task<string> GenerateAsync(Poster poster, string? themeOverride = null, string? accentOverride = null, PosterTemplate? template = null, CancellationToken ct = default);
+    Task<string> GenerateAsync(Poster poster, string? themeOverride = null, string? accentOverride = null, PosterTemplate? template = null, bool logosOnly = false, CancellationToken ct = default);
 
     /// <summary>
     /// Renders a poster using the same pipeline but writes the result under
@@ -48,17 +48,17 @@ public class SkiaSharpPosterImageService : IPosterImageService
         _logger = logger;
     }
 
-    public async Task<string> GenerateAsync(Poster poster, string? themeOverride = null, string? accentOverride = null, PosterTemplate? template = null, CancellationToken ct = default)
+    public async Task<string> GenerateAsync(Poster poster, string? themeOverride = null, string? accentOverride = null, PosterTemplate? template = null, bool logosOnly = false, CancellationToken ct = default)
     {
-        return await RenderAsync(poster, themeOverride, accentOverride, template, preview: false, ct);
+        return await RenderAsync(poster, themeOverride, accentOverride, template, preview: false, logosOnly: logosOnly, ct);
     }
 
     public async Task<string> RenderPreviewAsync(Poster poster, string? themeOverride = null, string? accentOverride = null, PosterTemplate? template = null, CancellationToken ct = default)
     {
-        return await RenderAsync(poster, themeOverride, accentOverride, template, preview: true, ct);
+        return await RenderAsync(poster, themeOverride, accentOverride, template, preview: true, logosOnly: false, ct);
     }
 
-    private async Task<string> RenderAsync(Poster poster, string? themeOverride, string? accentOverride, PosterTemplate? template, bool preview, CancellationToken ct)
+    private async Task<string> RenderAsync(Poster poster, string? themeOverride, string? accentOverride, PosterTemplate? template, bool preview, bool logosOnly, CancellationToken ct)
     {
         var brand = await BuildBrandAsync(ct);
 
@@ -90,7 +90,14 @@ public class SkiaSharpPosterImageService : IPosterImageService
 
         if (templateMode)
         {
-            DrawTemplateLayout(canvas, poster, template!, brand);
+            if (logosOnly)
+            {
+                DrawTemplateBackgroundOnly(canvas, template!, brand);
+            }
+            else
+            {
+                DrawTemplateLayout(canvas, poster, template!, brand);
+            }
         }
         else
         {
@@ -107,7 +114,14 @@ public class SkiaSharpPosterImageService : IPosterImageService
             if (theme.IsSrv)
             {
                 DrawSrvBackground(canvas, theme);
-                DrawSrvContent(canvas, poster, theme, brand, hero);
+                if (logosOnly)
+                {
+                    DrawSrvLogosOnly(canvas, theme);
+                }
+                else
+                {
+                    DrawSrvContent(canvas, poster, theme, brand, hero);
+                }
             }
             else if (aiBackground is not null)
             {
@@ -121,7 +135,10 @@ public class SkiaSharpPosterImageService : IPosterImageService
 
             if (!theme.IsSrv)
             {
-                DrawContent(canvas, poster, theme, brand, hero);
+                if (!logosOnly)
+                {
+                    DrawContent(canvas, poster, theme, brand, hero);
+                }
                 var logo = await LoadTenantLogoAsync(poster.TenantId, ct);
                 if (logo is not null)
                 {
@@ -428,6 +445,86 @@ public class SkiaSharpPosterImageService : IPosterImageService
             var rect = SKRect.Create(region.X * Width, region.Y * Height, region.W * Width, region.H * Height);
             using var font = new SKFont(region.Bold ? sansBold : sans, region.FontSize * Height);
             DrawRegionText(canvas, rect, text, font, region.Align, textColor);
+        }
+    }
+
+    /// <summary>
+    /// Renders only the template background (image + dim overlay + accent bar)
+    /// without any text regions — used for the "keep logos" regeneration mode.
+    /// </summary>
+    private void DrawTemplateBackgroundOnly(SKCanvas canvas, PosterTemplate template, Brand brand)
+    {
+        var wwwRoot = _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot");
+        var rel = template.BackgroundImagePath!.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+        var full = Path.Combine(wwwRoot, rel);
+
+        if (File.Exists(full))
+        {
+            using var bg = SKImage.FromEncodedData(full);
+            DrawCover(canvas, bg);
+        }
+        else
+        {
+            DrawBackground(canvas, new Poster(), PosterTheme.From(new[] { new SKColor(24, 26, 36), new SKColor(64, 24, 70) }, "dark"));
+        }
+
+        var dim = Math.Clamp(template.BackgroundDim, 0, 90);
+        if (dim > 0)
+        {
+            using var dimPaint = new SKPaint { Color = new SKColor(0, 0, 0, (byte)(dim * 255 / 100)) };
+            canvas.DrawRect(new SKRect(0, 0, Width, Height), dimPaint);
+        }
+    }
+
+    /// <summary>
+    /// Draws the SRV school header emblems and footer crest without any text —
+    /// used for the "keep logos" regeneration mode on school-layout posters.
+    /// </summary>
+    private void DrawSrvLogosOnly(SKCanvas canvas, PosterTheme theme)
+    {
+        var navy = theme.Accent;
+        var gold = theme.Secondary;
+
+        // Header emblems
+        using (var lamp = LoadSrvBrandImage("lamp.png"))
+        {
+            if (lamp is not null)
+            {
+                var dest = SKRect.Create(Width * 0.38f, 18f, 70f, 80f);
+                canvas.DrawImage(lamp, dest, SKSamplingOptions.Default, new SKPaint { IsAntialias = true });
+            }
+        }
+
+        using (var banner = LoadSrvBrandImage("banner.png"))
+        {
+            if (banner is not null)
+            {
+                var dest = SKRect.Create(Width * 0.47f, 8f, Width * 0.06f, 96f);
+                canvas.DrawImage(banner, dest, SKSamplingOptions.Default, new SKPaint { IsAntialias = true });
+            }
+        }
+
+        using (var vp = LoadSrvBrandImage("vidyapeetham.png"))
+        {
+            if (vp is not null)
+            {
+                var dest = SKRect.Create(Width * 0.54f, 18f, 70f, 80f);
+                canvas.DrawImage(vp, dest, SKSamplingOptions.Default, new SKPaint { IsAntialias = true });
+            }
+        }
+
+        // Footer crest
+        var logoSize = 90f;
+        using (var logo = LoadSrvCrestImage())
+        {
+            if (logo is not null)
+            {
+                canvas.DrawImage(logo, SKRect.Create(70f, SrvHeight - logoSize - 30f, logoSize, logoSize), SKSamplingOptions.Default, new SKPaint { IsAntialias = true });
+            }
+            else
+            {
+                DrawSrvYearsBadge(canvas, 136, 1305, navy, gold);
+            }
         }
     }
 

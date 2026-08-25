@@ -102,6 +102,10 @@
                     @Html.AntiForgeryToken()
                     <button type="submit" class="btn btn-warning">Regenerate</button>
                 </form>
+                <form asp-action="RegenerateKeepLogos" asp-route-id="@poster.Id" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-warning" title="Re-render keeping logos but removing all text layers">Keep Logos, Remove Text</button>
+                </form>
 
                 @if (Model.EnabledPlatforms.Count > 0)
                 {

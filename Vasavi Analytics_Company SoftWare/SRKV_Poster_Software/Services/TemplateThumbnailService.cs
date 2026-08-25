@@ -59,7 +59,7 @@ public class TemplateThumbnailService : ITemplateThumbnailService
 
         try
         {
-            var imagePath = await _image.GenerateAsync(sample, template.Theme, template.AccentColor, template, ct);
+            var imagePath = await _image.GenerateAsync(sample, template.Theme, template.AccentColor, template, logosOnly: false, ct);
             if (string.IsNullOrWhiteSpace(imagePath))
             {
                 return null;

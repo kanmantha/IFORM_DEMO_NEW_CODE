@@ -19,6 +19,13 @@ public sealed class GenerateOptions
 
     /// <summary>Admins may render posters on templates owned by any workspace.</summary>
     public bool CrossTenant { get; set; }
+
+    /// <summary>
+    /// When true the poster is re-rendered with the same background and logos
+    /// but all text layers (headline, caption, hashtags, footer) are stripped,
+    /// producing a clean visual with only the design and branding elements.
+    /// </summary>
+    public bool LogosOnly { get; set; }
 }
 
 public interface IPosterGenerationService
@@ -172,7 +179,7 @@ public class PosterGenerationService : IPosterGenerationService
             poster.Hashtags = copy.Hashtags;
             poster.AiProvider = copy.Provider;
 
-            poster.ImagePath = await _image.GenerateAsync(poster, template?.Theme, template?.AccentColor, template, ct);
+            poster.ImagePath = await _image.GenerateAsync(poster, template?.Theme, template?.AccentColor, template, logosOnly: options.LogosOnly, ct);
 
             poster.Status = PosterStatus.Ready;
             poster.GeneratedAt = DateTime.UtcNow;

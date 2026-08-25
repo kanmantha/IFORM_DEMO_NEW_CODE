@@ -64,14 +64,7 @@
         </div>
     </form>
 
-    <div class="d-flex flex-wrap gap-2 justify-content-center mb-4" id="studioChips">
-        <span class="chip badge text-bg-light">Women's Day</span>
-        <span class="chip badge text-bg-light">Diwali offer</span>
-        <span class="chip badge text-bg-light">Admissions open</span>
-        <span class="chip badge text-bg-light">Weekend special menu</span>
-        <span class="chip badge text-bg-light">Election rally</span>
-        <span class="chip badge text-bg-light">Match victory</span>
-    </div>
+    <div class="d-flex flex-wrap gap-2 justify-content-center mb-4" id="studioChips"></div>
 
     <div id="studioThinking" class="text-center py-5" style="display:none;">
         <span class="studio-thinking text-muted">Designing your poster<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
@@ -137,7 +130,7 @@
         const initialDate = '@(ViewBag.InitialDate as string ?? string.Empty)';
         dateInput.value = initialDate || new Date().toLocaleDateString('en-CA');
         let dateTouched = initialDate !== '';
-        dateInput.addEventListener('change', () => { dateTouched = true; });
+        dateInput.addEventListener('change', () => { dateTouched = true; loadOccasions(dateInput.value); });
 
         let round = 0;
         let busy = false;
@@ -149,10 +142,28 @@
         document.getElementById('studioRegen').addEventListener('click', () => {
             if (!busy && input.value.trim()) { round++; create(); }
         });
-        chips.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => {
-            input.value = chip.textContent.trim();
-            submit();
-        }));
+        function renderChips(list) {
+            chips.innerHTML = '';
+            list.forEach(text => {
+                const span = document.createElement('span');
+                span.className = 'chip badge text-bg-light';
+                span.textContent = text;
+                span.addEventListener('click', () => { input.value = text; submit(); });
+                chips.appendChild(span);
+            });
+        }
+
+        async function loadOccasions(date) {
+            if (!date) return;
+            try {
+                const resp = await fetch('@Url.Action("Occasions", "Studio")?date=' + encodeURIComponent(date));
+                if (!resp.ok) return;
+                const list = await resp.json();
+                if (Array.isArray(list) && list.length) renderChips(list);
+            } catch (_) { /* keep current chips on failure */ }
+        }
+
+        loadOccasions(dateInput.value);
 
         function submit() {
             round = 1;

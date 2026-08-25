@@ -8,189 +8,230 @@
     var canEditPoster = Model.IsImported && !string.IsNullOrWhiteSpace(posterSource);
 }
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="mb-0">Edit template</h1>
-    <a asp-action="Index" class="btn btn-outline-secondary">Back</a>
-</div>
+<style>
+    .edit-hero { background: linear-gradient(135deg, var(--bs-primary-bg-subtle) 0%, var(--bs-body-bg) 100%); border-radius: 16px; padding: 2rem 2.5rem; margin-bottom: 1.5rem; }
+    .edit-hero h1 { font-weight: 800; letter-spacing: -0.03em; }
+    .step-card { border: 1px solid rgba(0,0,0,.06); border-radius: 14px; transition: box-shadow .2s; }
+    .step-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.06); }
+    .tool-btn { border-radius: 10px; padding: .5rem 1rem; font-weight: 600; font-size: .82rem; border-width: 2px; transition: all .15s; }
+    .tool-btn.active { box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb),.25); }
+    .canvas-frame { background: repeating-conic-gradient(#f0f0f0 0% 25%, #fff 0% 50%) 50% / 16px 16px; border-radius: 12px; padding: 8px; border: 1px solid rgba(0,0,0,.08); }
+    #editCanvas { border-radius: 8px; cursor: crosshair; display: block; width: 100%; }
+    .ai-card { border: 2px solid rgba(var(--bs-primary-rgb),.18); border-radius: 14px; background: linear-gradient(180deg, rgba(var(--bs-primary-rgb),.03) 0%, transparent 100%); }
+    .ai-card .card-header { background: transparent; border-bottom: 1px solid rgba(var(--bs-primary-rgb),.1); }
+    .box-tag { display: inline-flex; align-items: center; gap: .4rem; padding: .25rem .6rem; border-radius: 8px; font-size: .78rem; font-weight: 600; }
+</style>
 
-<div class="auth-wrap" style="display:block;">
-    <div class="auth-card" style="max-width:560px;">
-        <p class="text-muted mb-4">Update the design settings for <strong>@Model.Name</strong>.</p>
-
-        <form asp-action="Edit" asp-route-id="@Model.Id" method="post" novalidate>
-            @Html.AntiForgeryToken()
-            <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
-            <input type="hidden" name="editorBoxesJson" id="EditorBoxesJson" value="" />
-
-            <div class="mb-3">
-                <label asp-for="Name" class="form-label">Template name</label>
-                <input asp-for="Name" class="form-control" />
-                <span asp-validation-for="Name" class="text-danger small"></span>
-            </div>
-
-            <div class="mb-3">
-                <label asp-for="Sector" class="form-label">Sector</label>
-                <select asp-for="Sector" class="form-select">
-                    @foreach (var s in SectorCatalog.All)
-                    {
-                        <option value="@s">@SectorCatalog.Label(s)</option>
-                    }
-                </select>
-                <span class="form-text small text-muted">Templates for your sector are preferred automatically.</span>
-            </div>
-
-            @if (Model.IsImported)
-            {
-                <hr />
-                <h6 class="text-muted mb-3">Imported layout settings</h6>
-
-                <div class="mb-3">
-                    <label asp-for="TextColor" class="form-label">Text colour (optional)</label>
-                    <div class="input-group">
-                        <input type="color" value="@(string.IsNullOrWhiteSpace(Model.TextColor) ? "#FFFFFF" : Model.TextColor)"
-                               oninput="document.getElementById('textHex').value = this.value;" class="form-control form-control-color" />
-                        <input type="text" id="textHex" asp-for="TextColor" class="form-control"
-                               placeholder="#RRGGBB (blank = auto)" maxlength="20" />
-                    </div>
-                    <span class="form-text small text-muted">Left blank, the best readable colour is chosen from your image.</span>
-                </div>
-
-                <div class="mb-3">
-                    <label asp-for="BackgroundDim" class="form-label">Background dim % (@Model.BackgroundDim)</label>
-                    <input asp-for="BackgroundDim" type="range" min="0" max="90" step="5"
-                           class="form-range"
-                           oninput="document.getElementById('dimVal').textContent = this.value;" />
-                    <span class="form-text small text-muted">Darkens the background so text stands out. 0 = none, 90 = heavy.</span>
-                </div>
-            }
-
-            <div class="mb-3">
-                <label asp-for="Description" class="form-label">Description</label>
-                <textarea asp-for="Description" class="form-control" rows="2"></textarea>
-            </div>
-
-            <div class="mb-3">
-                <label asp-for="Theme" class="form-label">Theme</label>
-                <select asp-for="Theme" class="form-select">
-                    @foreach (var th in themes)
-                    {
-                        <option value="@th">@char.ToUpperInvariant(th[0])@th.Substring(1)</option>
-                    }
-                </select>
-            </div>
-
-            <div class="mb-3">
-                <label asp-for="AccentColor" class="form-label">Accent color (optional)</label>
-                <div class="input-group">
-                    <input type="color" value="@(string.IsNullOrWhiteSpace(Model.AccentColor) ? "#FF6600" : Model.AccentColor)"
-                           oninput="document.getElementById('accentHex').value = this.value;" class="form-control form-control-color" />
-                    <input type="text" id="accentHex" asp-for="AccentColor" class="form-control"
-                           placeholder="#RRGGBB (blank = theme default)" maxlength="20" />
-                </div>
-                <span asp-validation-for="AccentColor" class="text-danger small"></span>
-            </div>
-
-            <div class="form-check mb-4">
-                <input asp-for="IsActive" class="form-check-input" />
-                <label asp-for="IsActive" class="form-check-label">Active (available when generating)</label>
-            </div>
-
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-gradient">Save Changes</button>
-                <a asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
-            </div>
-        </form>
+<div class="edit-hero">
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <h1 class="mb-1">Edit Template</h1>
+            <p class="text-muted mb-0">Update the design settings and layout for <strong>@Model.Name</strong></p>
+        </div>
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">Back to gallery</a>
     </div>
 </div>
 
-@if (canEditPoster)
-{
-    <div class="card mt-4 border-primary">
-        <div class="card-header bg-primary-subtle"><strong>🤖 Tell the assistant what to change</strong></div>
-        <div class="card-body">
-            <div class="row g-3 align-items-start">
-                <div class="col-lg-7">
-                    <textarea id="aiText" class="form-control mb-2" rows="2"
-                              placeholder='e.g. "remove all text and logos" or "make it black and white"'></textarea>
-                    <button type="button" class="btn btn-gradient" id="aiApply">Apply to this poster</button>
-                    <span class="form-text d-block mt-1">Applied instantly to the template — your original upload stays safe.</span>
-                </div>
-                <div class="col-lg-5 text-center">
-                    <img id="aiThumb" class="img-fluid border rounded d-none" style="max-height:200px;" alt="Updated preview" />
-                    <div id="aiMsg" class="alert d-none mt-2 mb-0 small py-2" role="alert"></div>
-                </div>
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card step-card mb-3">
+            <div class="card-body">
+                <form asp-action="Edit" asp-route-id="@Model.Id" method="post" novalidate>
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                    <input type="hidden" name="editorBoxesJson" id="EditorBoxesJson" value="" />
+
+                    <div class="mb-3">
+                        <label asp-for="Name" class="form-label small fw-semibold">Template name</label>
+                        <input asp-for="Name" class="form-control" />
+                        <span asp-validation-for="Name" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Sector" class="form-label small fw-semibold">Category</label>
+                        <select asp-for="Sector" class="form-select">
+                            @foreach (var s in SectorCatalog.All)
+                            {
+                                <option value="@s">@SectorCatalog.Label(s)</option>
+                            }
+                        </select>
+                        <div class="form-text">Templates for your sector are preferred automatically.</div>
+                    </div>
+
+                    @if (Model.IsImported)
+                    {
+                        <hr class="my-3" />
+                        <div class="small fw-semibold text-muted mb-3 text-uppercase" style="letter-spacing:.06em;">Layout settings</div>
+
+                        <div class="mb-3">
+                            <label asp-for="TextColor" class="form-label small fw-semibold">Text colour</label>
+                            <div class="input-group">
+                                <input type="color" value="@(string.IsNullOrWhiteSpace(Model.TextColor) ? "#FFFFFF" : Model.TextColor)"
+                                       oninput="document.getElementById('textHex').value = this.value;" class="form-control form-control-color" style="width:42px;height:38px;padding:3px;" />
+                                <input type="text" id="textHex" asp-for="TextColor" class="form-control"
+                                       placeholder="#RRGGBB (blank = auto)" maxlength="20" />
+                            </div>
+                            <div class="form-text">Left blank, the best readable colour is auto-chosen.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="BackgroundDim" class="form-label small fw-semibold">Background dim <span id="dimVal" class="text-muted fw-normal">@Model.BackgroundDim%</span></label>
+                            <input asp-for="BackgroundDim" type="range" min="0" max="90" step="5"
+                                   class="form-range"
+                                   oninput="document.getElementById('dimVal').textContent = this.value + '%';" />
+                            <div class="form-text">Darkens the background so text stands out.</div>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label asp-for="Description" class="form-label small fw-semibold">Description</label>
+                        <textarea asp-for="Description" class="form-control" rows="2"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Theme" class="form-label small fw-semibold">Theme</label>
+                        <select asp-for="Theme" class="form-select">
+                            @foreach (var th in themes)
+                            {
+                                <option value="@th">@char.ToUpperInvariant(th[0])@th.Substring(1)</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="AccentColor" class="form-label small fw-semibold">Accent colour</label>
+                        <div class="input-group">
+                            <input type="color" value="@(string.IsNullOrWhiteSpace(Model.AccentColor) ? "#FF6600" : Model.AccentColor)"
+                                   oninput="document.getElementById('accentHex').value = this.value;" class="form-control form-control-color" style="width:42px;height:38px;padding:3px;" />
+                            <input type="text" id="accentHex" asp-for="AccentColor" class="form-control"
+                                   placeholder="#RRGGBB (blank = theme default)" maxlength="20" />
+                        </div>
+                        <span asp-validation-for="AccentColor" class="text-danger small"></span>
+                    </div>
+
+                    <div class="form-check mb-4">
+                        <input asp-for="IsActive" class="form-check-input" />
+                        <label asp-for="IsActive" class="form-check-label small">Active (available when generating)</label>
+                    </div>
+
+                    <button type="submit" class="btn btn-gradient w-100 py-2 fw-semibold">Save Changes</button>
+                </form>
             </div>
         </div>
     </div>
 
-    <div class="card mt-4">
-        <div class="card-header"><strong>Edit the poster layout</strong></div>
-        <div class="card-body">
-            <div class="row g-4">
-                <div class="col-lg-4">
-                    <p class="small text-muted mb-2" id="toolHint"></p>
-                    <div class="btn-group w-100 mb-2" role="group" aria-label="Tool">
-                        <button type="button" class="btn btn-outline-danger" id="toolErase">Erase Text</button>
-                        <button type="button" class="btn btn-outline-warning" id="toolLogos">Erase Logos</button>
-                        <button type="button" class="btn btn-outline-success" id="toolKeep">Keep Logo</button>
-                    </div>
-                    <div class="d-flex gap-2 mb-2">
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnReset">Restore saved areas</button>
-                    </div>
-                    <div id="boxList" class="d-flex flex-column gap-1"></div>
-                    <div id="boxCount" class="small text-muted mt-2"></div>
-                    <div class="form-text">Changes are applied to the template background when you click Save Changes.</div>
+    <div class="col-lg-8">
+        @if (canEditPoster)
+        {
+            <!-- AI Assistant -->
+            <div class="card ai-card mb-3">
+                <div class="card-header d-flex align-items-center gap-2 py-3">
+                    <span style="font-size:1.3rem;">&#x1F916;</span>
+                    <strong>AI Assistant</strong>
+                    <span class="badge bg-primary-subtle text-primary ms-auto">Smart edit</span>
                 </div>
-                <div class="col-lg-8">
-                    <div class="text-center">
-                        <canvas id="editCanvas" class="img-fluid border rounded" style="max-width:100%; max-height:70vh; cursor:crosshair;"></canvas>
+                <div class="card-body">
+                    <div class="row g-3 align-items-start">
+                        <div class="col-lg-7">
+                            <textarea id="aiText" class="form-control mb-3" rows="2"
+                                      placeholder='e.g. "remove all text and logos" or "make it black and white"'></textarea>
+                            <button type="button" class="btn btn-gradient px-4 fw-semibold" id="aiApply">Apply to this poster</button>
+                            <div class="form-text mt-1">Applied instantly to the template &mdash; your original upload stays safe.</div>
+                        </div>
+                        <div class="col-lg-5 text-center">
+                            <div class="canvas-frame d-inline-block">
+                                <img id="aiThumb" class="img-fluid rounded d-none" style="max-height:200px;" alt="Updated preview" />
+                            </div>
+                            <div id="aiMsg" class="alert d-none mt-2 mb-0 small py-2" role="alert"></div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <div class="modal fade" id="detectModal" tabindex="-1" aria-labelledby="detectTitle" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="detectTitle">Confirm areas</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <!-- Layout Editor -->
+            <div class="card step-card">
+                <div class="card-header d-flex justify-content-between align-items-center py-3">
+                    <strong>Poster Layout Editor</strong>
+                    <span class="badge text-bg-light" id="toolLabel">Erase Text</span>
                 </div>
-                <div class="modal-body">
-                    <p class="small text-muted" id="detectIntro"></p>
-                    <div id="detectList"></div>
-                    <div class="form-text">Highlighted boxes are shown on the poster preview.</div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" id="detectConfirm">Apply</button>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-lg-4">
+                            <p class="small text-muted mb-3" id="toolHint">
+                                Click <strong>Erase Text</strong> to auto-detect old text areas &mdash; you confirm each one.
+                                Dragging marks an area manually.
+                            </p>
+                            <div class="d-flex gap-2 mb-3">
+                                <button type="button" class="tool-btn btn btn-danger active" id="toolErase">Erase Text</button>
+                                <button type="button" class="tool-btn btn btn-outline-warning" id="toolLogos">Erase Logos</button>
+                                <button type="button" class="tool-btn btn btn-outline-success" id="toolKeep">Keep Logo</button>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnReset">Restore saved areas</button>
+                                <span class="small text-muted" id="boxCount"></span>
+                            </div>
+                            <div id="boxList" class="d-flex flex-column gap-1" style="max-height:180px; overflow-y:auto;"></div>
+                            <div class="form-text mt-2">Changes are applied when you click Save Changes above.</div>
+                        </div>
+                        <div class="col-lg-8">
+                            <div class="canvas-frame text-center">
+                                <canvas id="editCanvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
-}
 
-@if (!canEditPoster)
-{
-    <div class="card mt-4 border-primary">
-        <div class="card-header bg-primary-subtle"><strong>🤖 Restyle with AI</strong></div>
-        <div class="card-body">
-            <div class="row g-3 align-items-start">
-                <div class="col-lg-7">
-                    <textarea id="aiText" class="form-control mb-2" rows="2"
-                              placeholder='e.g. "make it dark blue", "black and white", "make it light and airy"'></textarea>
-                    <button type="button" class="btn btn-gradient" id="aiApply">Apply restyle</button>
-                    <span class="form-text d-block mt-1">This template draws a fresh poster every day — the assistant retunes its colours and style.</span>
-                </div>
-                <div class="col-lg-5 text-center">
-                    <img id="aiThumb" class="img-fluid border rounded d-none" style="max-height:200px;" alt="Updated preview" />
-                    <div id="aiMsg" class="alert d-none mt-2 mb-0 small py-2" role="alert"></div>
+            <!-- Auto-detect confirmation modal -->
+            <div class="modal fade" id="detectModal" tabindex="-1" aria-labelledby="detectTitle" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content" style="border-radius:14px; border:none;">
+                        <div class="modal-header border-0 pb-0">
+                            <h5 class="modal-title fw-bold" id="detectTitle">Confirm areas</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="small text-muted" id="detectIntro"></p>
+                            <div id="detectList" class="mb-2"></div>
+                            <div class="form-text">Tick/untick areas, then confirm below.</div>
+                        </div>
+                        <div class="modal-footer border-0 pt-0">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-danger fw-semibold" id="detectConfirm">Apply</button>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
+        }
+        else
+        {
+            <!-- Restyle with AI (non-imported templates) -->
+            <div class="card ai-card">
+                <div class="card-header d-flex align-items-center gap-2 py-3">
+                    <span style="font-size:1.3rem;">&#x1F916;</span>
+                    <strong>Restyle with AI</strong>
+                    <span class="badge bg-primary-subtle text-primary ms-auto">Smart restyle</span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 align-items-start">
+                        <div class="col-lg-7">
+                            <textarea id="aiText" class="form-control mb-3" rows="2"
+                                      placeholder='e.g. "make it dark blue", "black and white", "make it light and airy"'></textarea>
+                            <button type="button" class="btn btn-gradient px-4 fw-semibold" id="aiApply">Apply restyle</button>
+                            <div class="form-text mt-1">This template draws a fresh poster every day &mdash; the assistant retunes its colours and style.</div>
+                        </div>
+                        <div class="col-lg-5 text-center">
+                            <div class="canvas-frame d-inline-block">
+                                <img id="aiThumb" class="img-fluid rounded d-none" style="max-height:200px;" alt="Updated preview" />
+                            </div>
+                            <div id="aiMsg" class="alert d-none mt-2 mb-0 small py-2" role="alert"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
     </div>
-}
+</div>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
@@ -237,8 +278,18 @@
 
                 function setTool(t) {
                     tool = t;
-                    Object.keys(TOOL_IDS).forEach(k => TOOL_IDS[k].classList.toggle('active', k === t));
+                    Object.keys(TOOL_IDS).forEach(k => {
+                        const btn = TOOL_IDS[k];
+                        btn.classList.toggle('active', k === t);
+                        if (k === t) {
+                            btn.className = 'tool-btn btn btn-' + TOOLS[k].cls;
+                        } else {
+                            btn.className = 'tool-btn btn btn-outline-' + TOOLS[k].cls;
+                        }
+                    });
                     document.getElementById('toolHint').innerHTML = TOOLS[t].hint;
+                    document.getElementById('toolLabel').textContent = TOOLS[t].label;
+                    document.getElementById('toolLabel').className = 'badge text-bg-' + TOOLS[t].cls;
                 }
 
                 toolErase.addEventListener('click', () => { setTool('erase'); detectAndConfirm('text'); });
@@ -327,28 +378,32 @@
                     boxList.innerHTML = '';
                     boxes.forEach((b, i) => {
                         const div = document.createElement('div');
-                        div.className = 'input-group input-group-sm';
-                        const span = document.createElement('span');
-                        span.className = 'input-group-text text-' + (TOOLS[b.type] ? TOOLS[b.type].cls : 'danger');
-                        span.textContent = (TOOLS[b.type] ? TOOLS[b.type].label : b.type) + ' ' + (i + 1);
-                        const lbl = document.createElement('span');
-                        lbl.className = 'form-control';
-                        lbl.textContent = (b.x * 100).toFixed(0) + '% × ' + (b.y * 100).toFixed(0) + '% · ' + (b.w * 100).toFixed(0) + '% × ' + (b.h * 100).toFixed(0) + '%';
+                        div.className = 'd-flex align-items-center gap-2 p-2 rounded-2';
+                        div.style.background = 'rgba(0,0,0,.03)';
+
+                        const tag = document.createElement('span');
+                        tag.className = 'box-tag text-bg-' + (TOOLS[b.type] ? TOOLS[b.type].cls : 'danger');
+                        tag.textContent = (TOOLS[b.type] ? TOOLS[b.type].label : b.type);
+
+                        const info = document.createElement('span');
+                        info.className = 'small text-muted flex-grow-1';
+                        info.textContent = Math.round(b.x * 100) + '% x ' + Math.round(b.y * 100) + '%  ' + Math.round(b.w * 100) + '% x ' + Math.round(b.h * 100) + '%';
+
                         const btn = document.createElement('button');
                         btn.type = 'button';
-                        btn.className = 'btn btn-outline-danger';
-                        btn.textContent = '✕';
+                        btn.className = 'btn btn-sm btn-outline-danger border-0';
+                        btn.innerHTML = '&times;';
                         btn.addEventListener('click', () => { boxes.splice(i, 1); sync(); });
-                        div.appendChild(span);
-                        div.appendChild(lbl);
+
+                        div.appendChild(tag);
+                        div.appendChild(info);
                         div.appendChild(btn);
                         boxList.appendChild(div);
                     });
                     const n = t => boxes.filter(b => b.type === t).length;
                     boxCount.textContent = boxes.length === 0
-                        ? 'No areas marked yet.'
-                        : boxes.length + ' area' + (boxes.length === 1 ? '' : 's') + ' marked (erase: ' + n('erase') +
-                          ', del logo: ' + n('erase-logo') + ', keep: ' + n('keep') + ').';
+                        ? 'No areas marked'
+                        : boxes.length + ' area' + (boxes.length === 1 ? '' : 's') + ' (erase: ' + n('erase') + ', logo: ' + n('erase-logo') + ', keep: ' + n('keep') + ')';
                 }
 
                 canvas.addEventListener('mousedown', e => {
@@ -394,7 +449,7 @@
                     const btn = kind === 'logos' ? toolLogos : toolErase;
                     const old = btn.textContent;
                     btn.disabled = true;
-                    btn.textContent = 'Detecting…';
+                    btn.textContent = 'Detecting...';
                     const fd = new FormData();
                     fd.append('__RequestVerificationToken', antiToken);
                     fetch('/Templates/AutoDetectTemplate/' + templateId, { method: 'POST', body: fd })
@@ -453,7 +508,7 @@
                         list.appendChild(div);
                     });
                     const confirmBtn = document.getElementById('detectConfirm');
-                    confirmBtn.className = 'btn btn-' + (isLogos ? 'warning' : 'danger');
+                    confirmBtn.className = 'btn btn-' + (isLogos ? 'warning' : 'danger') + ' fw-semibold';
                     confirmBtn.textContent = isLogos ? 'Remove selected logos' : 'Erase selected areas';
                     render();
                     modal.show();
@@ -461,8 +516,8 @@
 
                 function areaText(b) {
                     return (TOOLS[b.type] ? TOOLS[b.type].label : b.type) +
-                        ' · x ' + Math.round(b.x * 100) + '% · y ' + Math.round(b.y * 100) + '%' +
-                        ' · ' + Math.round(b.w * 100) + '% × ' + Math.round(b.h * 100) + '%';
+                        ' - x ' + Math.round(b.x * 100) + '% - y ' + Math.round(b.y * 100) + '%' +
+                        ' - ' + Math.round(b.w * 100) + '% x ' + Math.round(b.h * 100) + '%';
                 }
 
                 const detectModalEl = document.getElementById('detectModal');
@@ -539,7 +594,7 @@
                 }
                 aiApplyBtn.disabled = true;
                 const oldLabel = aiApplyBtn.textContent;
-                aiApplyBtn.textContent = 'Thinking…';
+                aiApplyBtn.textContent = 'Thinking...';
                 const fd = new FormData();
                 fd.append('__RequestVerificationToken', document.querySelector('input[name="__RequestVerificationToken"]').value);
                 fd.append('id', @Model.Id);

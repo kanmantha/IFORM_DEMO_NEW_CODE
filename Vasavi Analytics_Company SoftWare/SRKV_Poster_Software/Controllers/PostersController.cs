@@ -239,6 +239,35 @@ public class PostersController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RegenerateKeepLogos(int id, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var poster = await db.Posters
+            .Include(p => p.Events)
+            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == _tenant.TenantId, ct);
+
+        if (poster is null)
+        {
+            return NotFound();
+        }
+
+        var events = poster.Events
+            .OrderBy(e => e.Kind == "selected" ? 0 : 1)
+            .Select(e => new EventItem { Text = e.Text, Year = e.Year, Kind = e.Kind, Url = e.Url })
+            .ToList();
+
+        var result = await _generation.GenerateAsync(poster.EventDate, events,
+            new GenerateOptions { Persist = true, TenantId = poster.TenantId, TemplateId = poster.TemplateId, LogosOnly = true }, ct);
+
+        TempData[result.Success ? "Success" : "Error"] = result.Success
+            ? "Poster regenerated with logos only (text removed)."
+            : $"Regeneration failed: {result.Error}";
+
+        return RedirectToAction(nameof(Details), new { id = result.Poster?.Id ?? id });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(int id, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

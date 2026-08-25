@@ -3,28 +3,55 @@
     ViewData["Title"] = "Create or Update a Poster";
 }
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-        <h1 class="mb-1">Create or Update a Poster</h1>
-        <p class="text-muted mb-0">
-            Upload an old design and tell the assistant what to change — it removes text,
-            drops unwanted logos and refreshes the colours. Your original upload is always kept safe.
-        </p>
+<style>
+    .import-hero { background: linear-gradient(135deg, var(--bs-primary-bg-subtle) 0%, var(--bs-body-bg) 100%); border-radius: 16px; padding: 2rem 2.5rem; margin-bottom: 1.5rem; }
+    .import-hero h1 { font-weight: 800; letter-spacing: -0.03em; }
+    .import-hero p { max-width: 560px; }
+    .step-card { border: 1px solid rgba(0,0,0,.06); border-radius: 14px; transition: box-shadow .2s; }
+    .step-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.06); }
+    .step-num { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+    .tool-btn { border-radius: 10px; padding: .5rem 1rem; font-weight: 600; font-size: .82rem; border-width: 2px; transition: all .15s; }
+    .tool-btn.active { box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb),.25); }
+    .tool-btn:hover { transform: translateY(-1px); }
+    .canvas-frame { background: repeating-conic-gradient(#f0f0f0 0% 25%, #fff 0% 50%) 50% / 16px 16px; border-radius: 12px; padding: 8px; border: 1px solid rgba(0,0,0,.08); }
+    #editCanvas { border-radius: 8px; cursor: crosshair; display: block; width: 100%; }
+    .ai-card { border: 2px solid rgba(var(--bs-primary-rgb),.18); border-radius: 14px; background: linear-gradient(180deg, rgba(var(--bs-primary-rgb),.03) 0%, transparent 100%); }
+    .ai-card .card-header { background: transparent; border-bottom: 1px solid rgba(var(--bs-primary-rgb),.1); }
+    .chip-btn { border-radius: 999px; font-size: .78rem; padding: .3rem .7rem; border: 1px solid rgba(0,0,0,.12); background: var(--bs-body-bg); transition: all .15s; }
+    .chip-btn:hover { background: var(--bs-primary); color: #fff; border-color: var(--bs-primary); }
+    .treat-option { border: 2px solid rgba(0,0,0,.08); border-radius: 10px; padding: .65rem .85rem; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: .6rem; }
+    .treat-option:hover { border-color: var(--bs-primary); background: rgba(var(--bs-primary-rgb),.04); }
+    .treat-option.selected { border-color: var(--bs-primary); background: rgba(var(--bs-primary-rgb),.08); box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb),.12); }
+    .treat-option input[type="radio"] { accent-color: var(--bs-primary); width: 18px; height: 18px; }
+    .box-tag { display: inline-flex; align-items: center; gap: .4rem; padding: .25rem .6rem; border-radius: 8px; font-size: .78rem; font-weight: 600; }
+    .empty-canvas { border: 2px dashed rgba(0,0,0,.12); border-radius: 12px; padding: 4rem 2rem; text-align: center; }
+    .empty-canvas .icon { font-size: 3rem; opacity: .3; }
+</style>
+
+<div class="import-hero">
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <h1 class="mb-1">Poster Workshop</h1>
+            <p class="text-muted mb-0">
+                Upload an existing design — the assistant strips old text, cleans up logos,
+                and refreshes colours so you get a polished, reusable template.
+            </p>
+        </div>
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">Back to gallery</a>
     </div>
-    <a asp-action="Index" class="btn btn-outline-secondary">Back</a>
 </div>
 
-<ul class="nav nav-tabs mb-4" role="tablist">
+<ul class="nav nav-pills gap-2 mb-4" role="tablist">
     <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="tab-update-btn" data-bs-toggle="tab" data-bs-target="#tab-update"
+        <button class="nav-link active px-4 py-2" id="tab-update-btn" data-bs-toggle="tab" data-bs-target="#tab-update"
                 type="button" role="tab" aria-selected="true">
-            🖼️ Update an old poster
+            Update an old poster
         </button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link" id="tab-new-btn" data-bs-toggle="tab" data-bs-target="#tab-new"
+        <button class="nav-link px-4 py-2" id="tab-new-btn" data-bs-toggle="tab" data-bs-target="#tab-new"
                 type="button" role="tab" aria-selected="false">
-            ✨ Create a new poster
+            Create a new poster
         </button>
     </li>
 </ul>
@@ -42,16 +69,20 @@
 
             <div class="row g-4">
                 <div class="col-lg-5">
-                    <div class="card">
-                        <div class="card-header"><strong>1 · Details &amp; upload</strong></div>
+                    <!-- Step 1: Details & Upload -->
+                    <div class="card step-card mb-3">
                         <div class="card-body">
-                            <div class="mb-3">
-                                <label asp-for="Name" class="form-label"></label>
-                                <input asp-for="Name" class="form-control" placeholder="e.g. Weekend Menu Board" />
-                                <span asp-validation-for="Name" class="text-danger"></span>
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <span class="step-num bg-primary text-white">1</span>
+                                <strong>Upload your poster</strong>
                             </div>
                             <div class="mb-3">
-                                <label asp-for="Sector" class="form-label"></label>
+                                <label asp-for="Name" class="form-label small fw-semibold">Template name</label>
+                                <input asp-for="Name" class="form-control" placeholder="e.g. Weekend Menu Board" />
+                                <span asp-validation-for="Name" class="text-danger small"></span>
+                            </div>
+                            <div class="mb-3">
+                                <label asp-for="Sector" class="form-label small fw-semibold">Category</label>
                                 <select asp-for="Sector" class="form-select">
                                     @foreach (var s in Model.SectorOptions)
                                     {
@@ -59,126 +90,171 @@
                                     }
                                 </select>
                             </div>
-                            <div class="mb-3">
-                                <label asp-for="Upload" class="form-label"></label>
-                                <input asp-for="Upload" type="file" id="fileInput" accept=".png,.jpg,.jpeg,.webp" class="form-control" />
-                                <div class="form-text">PNG, JPG or WEBP, up to 10 MB. A portrait poster works best.</div>
-                                <span asp-validation-for="Upload" class="text-danger"></span>
+                            <div>
+                                <label asp-for="Upload" class="form-label small fw-semibold">Poster image</label>
+                                <input asp-for="Upload" type="file" id="fileInput" accept=".png,.jpg,.jpeg,.webp"
+                                       class="form-control" style="border-style:dashed;" />
+                                <div class="form-text">PNG, JPG or WEBP &middot; up to 10 MB &middot; portrait works best</div>
+                                <span asp-validation-for="Upload" class="text-danger small"></span>
                             </div>
                         </div>
                     </div>
 
-                    <div class="card mt-3 border-primary">
-                        <div class="card-header bg-primary-subtle"><strong>🤖 Tell the assistant what to change</strong></div>
+                    <!-- AI Assistant -->
+                    <div class="card ai-card mb-3">
+                        <div class="card-header d-flex align-items-center gap-2 py-3">
+                            <span style="font-size:1.3rem;">&#x1F916;</span>
+                            <strong>AI Assistant</strong>
+                            <span class="badge bg-primary-subtle text-primary ms-auto">Smart edit</span>
+                        </div>
                         <div class="card-body">
-                            <textarea id="aiText" class="form-control mb-2" rows="3"
-                                      placeholder='e.g. "remove all text and logos, make it blue"'></textarea>
-                            <div class="d-flex flex-wrap gap-1 mb-2" id="aiChips">
-                                <button type="button" class="btn btn-sm btn-outline-secondary">remove all text</button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary">remove text and logos</button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary">make it black and white</button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary">make it green</button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary">new background</button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary">enhance the colours</button>
+                            <textarea id="aiText" class="form-control mb-3" rows="3"
+                                      placeholder='Tell it what to change… e.g. "remove all text and make it blue"'></textarea>
+                            <div class="d-flex flex-wrap gap-1 mb-3" id="aiChips">
+                                <button type="button" class="chip-btn">remove all text</button>
+                                <button type="button" class="chip-btn">remove text and logos</button>
+                                <button type="button" class="chip-btn">make it black and white</button>
+                                <button type="button" class="chip-btn">make it green</button>
+                                <button type="button" class="chip-btn">new background</button>
+                                <button type="button" class="chip-btn">enhance the colours</button>
                             </div>
-                            <button type="button" class="btn btn-gradient w-100" id="aiApply">Apply instruction</button>
-                            <div id="aiMsg" class="alert d-none mt-2 mb-0 small py-2" role="alert"></div>
-                            <div id="aiResultWrap" class="d-none mt-2 text-center">
-                                <img id="aiThumb" class="img-fluid border rounded" style="max-height:260px;" alt="Updated preview" />
-                                <div class="form-text">Preview of your updated poster — erasures are marked on the editor.</div>
+                            <button type="button" class="btn btn-gradient w-100 py-2 fw-semibold" id="aiApply">
+                                Apply instruction
+                            </button>
+                            <div id="aiMsg" class="alert d-none mt-3 mb-0 small py-2" role="alert"></div>
+                            <div id="aiResultWrap" class="d-none mt-3 text-center">
+                                <div class="canvas-frame d-inline-block">
+                                    <img id="aiThumb" class="img-fluid rounded" style="max-height:260px;" alt="Updated preview" />
+                                </div>
+                                <div class="form-text mt-1">Preview &mdash; erasures are highlighted on the editor canvas</div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="card mt-3">
-                        <div class="card-header"><strong>2 · Mark the layout (optional)</strong></div>
+                    <!-- Step 2: Layout Editor -->
+                    <div class="card step-card mb-3">
                         <div class="card-body">
-                            <p class="small text-muted mb-2" id="toolHint">
-                                The assistant above usually handles erasing. Prefer manual control?
-                                Click <strong>Erase Text</strong> or <strong>Erase Logos</strong> to auto-detect
-                                areas, or drag on the poster to mark one yourself.
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <span class="step-num bg-warning text-dark">2</span>
+                                <strong>Mark regions</strong>
+                                <span class="small text-muted ms-2">optional</span>
+                            </div>
+                            <p class="small text-muted mb-3" id="toolHint">
+                                The AI usually handles erasing. For manual control, click a tool below
+                                or drag directly on the poster.
                             </p>
-                            <div class="btn-group w-100 mb-2" role="group" aria-label="Tool">
-                                <button type="button" class="btn btn-outline-danger active" id="toolErase">Erase Text</button>
-                                <button type="button" class="btn btn-outline-warning" id="toolLogos">Erase Logos</button>
-                                <button type="button" class="btn btn-outline-success" id="toolKeep">Keep Logo</button>
+                            <div class="d-flex gap-2 mb-3">
+                                <button type="button" class="tool-btn btn btn-danger active" id="toolErase">Erase Text</button>
+                                <button type="button" class="tool-btn btn btn-outline-warning" id="toolLogos">Erase Logos</button>
+                                <button type="button" class="tool-btn btn btn-outline-success" id="toolKeep">Keep Logo</button>
                             </div>
-                            <div class="d-flex gap-2 mb-2">
+                            <div class="d-flex align-items-center gap-2 mb-2">
                                 <button type="button" class="btn btn-sm btn-outline-secondary" id="btnClear">Clear all</button>
+                                <span class="small text-muted" id="boxCount">No areas marked</span>
                             </div>
-                            <div id="boxList" class="d-flex flex-column gap-1"></div>
-                            <div id="boxCount" class="small text-muted mt-2">No areas marked yet.</div>
+                            <div id="boxList" class="d-flex flex-column gap-1" style="max-height:140px; overflow-y:auto;"></div>
                         </div>
                     </div>
 
-                    <div class="card mt-3">
-                        <div class="card-header"><strong>3 · Refresh colours</strong></div>
+                    <!-- Step 3: Colour Treatment -->
+                    <div class="card step-card mb-3">
                         <div class="card-body">
-                            <div class="form-check">
-                                <input class="form-check-input treat-radio" type="radio" name="TreatmentKind" id="treatOriginal" value="original" checked />
-                                <label class="form-check-label" for="treatOriginal">Keep original colours</label>
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <span class="step-num bg-info text-white">3</span>
+                                <strong>Colour treatment</strong>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input treat-radio" type="radio" name="TreatmentKind" id="treatTint" value="tint" />
-                                <label class="form-check-label" for="treatTint">Colour tint wash</label>
+                            <div class="d-flex flex-column gap-2">
+                                <label class="treat-option selected">
+                                    <input type="radio" name="TreatmentKind" value="original" checked class="treat-radio" />
+                                    <div>
+                                        <div class="fw-semibold small">Keep original</div>
+                                        <div class="text-muted" style="font-size:.75rem;">No colour changes</div>
+                                    </div>
+                                </label>
+                                <label class="treat-option">
+                                    <input type="radio" name="TreatmentKind" value="tint" class="treat-radio" />
+                                    <div>
+                                        <div class="fw-semibold small">Colour tint wash</div>
+                                        <div class="text-muted" style="font-size:.75rem;">Overlay a brand colour</div>
+                                    </div>
+                                </label>
+                                <div class="ms-4 mb-2 d-none" id="tintControls">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <input type="color" class="form-control form-control-sm" id="tintHex" name="TintHex" value="#1e88e5" title="Tint colour" style="width:36px;height:36px;padding:2px;" />
+                                        <input type="range" class="form-range" id="tintStrengthRange" min="10" max="85" value="45" style="max-width:160px;" />
+                                        <span class="small text-muted" id="tintStrengthLabel">45%</span>
+                                    </div>
+                                    <input type="hidden" id="TintStrength" name="TintStrength" value="0.45" />
+                                </div>
+                                <label class="treat-option">
+                                    <input type="radio" name="TreatmentKind" value="enhance" class="treat-radio" />
+                                    <div>
+                                        <div class="fw-semibold small">Enhance colours</div>
+                                        <div class="text-muted" style="font-size:.75rem;">Fix faded prints</div>
+                                    </div>
+                                </label>
+                                <label class="treat-option">
+                                    <input type="radio" name="TreatmentKind" value="grayscale" class="treat-radio" />
+                                    <div>
+                                        <div class="fw-semibold small">Black &amp; white</div>
+                                        <div class="text-muted" style="font-size:.75rem;">Desaturate all colours</div>
+                                    </div>
+                                </label>
+                                <label class="treat-option">
+                                    <input type="radio" name="TreatmentKind" value="fresh" class="treat-radio" />
+                                    <div>
+                                        <div class="fw-semibold small">Fresh new background</div>
+                                        <div class="text-muted" style="font-size:.75rem;">Replace with a gradient</div>
+                                    </div>
+                                </label>
+                                <div class="ms-4 mt-1 d-none" id="freshControls">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <select class="form-select form-select-sm w-auto" id="freshTheme" name="FreshTheme">
+                                            <option value="colorful">Colourful gradient</option>
+                                            <option value="light">Light &amp; clean</option>
+                                            <option value="dark">Dark premium</option>
+                                        </select>
+                                        <input type="color" class="form-control form-control-sm" id="freshAccent" name="FreshAccent" value="#ffd54f" title="Accent glow" style="width:36px;height:36px;padding:2px;" />
+                                    </div>
+                                </div>
                             </div>
-                            <div class="ms-4 mb-2 d-none" id="tintControls">
-                                <input type="color" class="form-control form-control-color d-inline-block align-middle me-2"
-                                       id="tintHex" name="TintHex" value="#1e88e5" title="Tint colour" />
-                                <input type="range" class="form-range d-inline-block align-middle" style="max-width:180px;"
-                                       id="tintStrengthRange" min="10" max="85" value="45" />
-                                <span class="small text-muted align-middle" id="tintStrengthLabel">45%</span>
-                                <input type="hidden" id="TintStrength" name="TintStrength" value="0.45" />
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input treat-radio" type="radio" name="TreatmentKind" id="treatEnhance" value="enhance" />
-                                <label class="form-check-label" for="treatEnhance">Enhance colours (fix faded prints)</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input treat-radio" type="radio" name="TreatmentKind" id="treatGray" value="grayscale" />
-                                <label class="form-check-label" for="treatGray">Black &amp; white</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input treat-radio" type="radio" name="TreatmentKind" id="treatFresh" value="fresh" />
-                                <label class="form-check-label" for="treatFresh">Fresh new background</label>
-                            </div>
-                            <div class="ms-4 mt-1 d-none" id="freshControls">
-                                <select class="form-select form-select-sm d-inline-block w-auto me-2" id="freshTheme" name="FreshTheme">
-                                    <option value="colorful">Colourful gradient</option>
-                                    <option value="light">Light &amp; clean</option>
-                                    <option value="dark">Dark premium</option>
-                                </select>
-                                <input type="color" class="form-control form-control-color d-inline-block align-middle"
-                                       id="freshAccent" name="FreshAccent" value="#ffd54f" title="Accent glow" />
-                            </div>
-                            <div class="mt-2 d-flex align-items-center gap-2">
-                                <button type="button" class="btn btn-sm btn-outline-primary" id="btnTreatPreview">See colour preview</button>
+                            <div class="mt-3 d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="btnTreatPreview">Preview colours</button>
                                 <span class="small text-muted d-none" id="treatNote">Final import applies erasures + colour at full quality.</span>
                             </div>
-                            <div class="mt-2 d-none" id="treatThumbWrap">
-                                <img id="treatThumb" class="img-fluid border rounded" style="max-height:220px;" alt="Colour preview" />
+                            <div class="mt-3 d-none" id="treatThumbWrap">
+                                <div class="canvas-frame d-inline-block">
+                                    <img id="treatThumb" class="img-fluid rounded" style="max-height:220px;" alt="Colour preview" />
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="my-3 d-flex gap-2">
-                        <button type="submit" class="btn btn-gradient">Create Updated Template</button>
-                        <a asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
+                    <div class="d-flex gap-2 my-4">
+                        <button type="submit" class="btn btn-gradient btn-lg px-4 fw-semibold">Create Template</button>
+                        <a asp-action="Index" class="btn btn-outline-secondary btn-lg">Cancel</a>
                     </div>
                 </div>
 
                 <div class="col-lg-7">
-                    <div class="card h-100">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <strong>Your poster</strong>
-                            <span class="small text-muted">Tool: <span id="toolLabel" class="text-danger">Erase Text</span></span>
-                        </div>
-                        <div class="card-body text-center">
-                            <div id="canvasWrap" class="d-none mx-auto" style="max-width:420px;">
-                                <canvas id="editCanvas" class="img-fluid border rounded" style="max-width:100%; cursor:crosshair;"></canvas>
+                    <div class="card step-card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center py-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <strong>Canvas</strong>
+                                <span class="badge text-bg-light" id="toolLabel">Erase Text</span>
                             </div>
-                            <div id="emptyHint" class="text-muted py-5">
-                                Choose a poster image above to start updating it.
+                            <span class="small text-muted" id="canvasHint">Draw regions to mark areas</span>
+                        </div>
+                        <div class="card-body d-flex align-items-center justify-content-center" style="min-height:480px;">
+                            <div id="canvasWrap" class="d-none w-100 text-center">
+                                <div class="canvas-frame d-inline-block" style="max-width:440px;">
+                                    <canvas id="editCanvas"></canvas>
+                                </div>
+                            </div>
+                            <div id="emptyHint" class="empty-canvas w-100">
+                                <div class="icon mb-2">&#x1F5BC;</div>
+                                <h5 class="text-muted">No poster uploaded</h5>
+                                <p class="text-muted small mb-0">Choose a poster image on the left to start editing</p>
                             </div>
                         </div>
                     </div>
@@ -190,21 +266,21 @@
     <div class="tab-pane fade" id="tab-new" role="tabpanel">
         <div class="row justify-content-center">
             <div class="col-lg-8">
-                <div class="card text-center shadow-sm">
+                <div class="card step-card text-center shadow-sm">
                     <div class="card-body p-5">
-                        <div style="font-size:2.6rem;">✨</div>
-                        <h3 class="mb-2">Generate a fresh poster with AI</h3>
-                        <p class="text-muted mb-4">
+                        <div style="font-size:3rem;" class="mb-2">&#x2728;</div>
+                        <h3 class="mb-2 fw-bold">Generate a fresh poster with AI</h3>
+                        <p class="text-muted mb-4" style="max-width:440px; margin:0 auto;">
                             Describe the occasion in the Poster Studio — a festival, a sale, an event —
-                            pick a date from the calendar and get ready-to-share designs instantly.
+                            pick a date and get ready-to-share designs instantly.
                         </p>
-                        <a href="/Studio" class="btn btn-gradient btn-lg px-4">Open Poster Studio</a>
+                        <a href="/Studio" class="btn btn-gradient btn-lg px-5 fw-semibold">Open Poster Studio</a>
                         <hr class="my-4" />
                         <div class="d-flex flex-wrap justify-content-center gap-2">
-                            <a class="btn btn-sm btn-outline-secondary" href="/Studio?prompt=Diwali%20greetings%20for%20my%20customers">🪔 Diwali</a>
-                            <a class="btn btn-sm btn-outline-secondary" href="/Studio?prompt=Independence%20Day%20celebration">🇮🇳 Independence Day</a>
-                            <a class="btn btn-sm btn-outline-secondary" href="/Studio?prompt=Mega%20sale%20announcement">🏷️ Mega Sale</a>
-                            <a class="btn btn-sm btn-outline-secondary" href="/Studio?prompt=School%20annual%20day%20function">🏫 School Event</a>
+                            <a class="btn btn-sm chip-btn" href="/Studio?prompt=Diwali%20greetings%20for%20my%20customers">Diwali</a>
+                            <a class="btn btn-sm chip-btn" href="/Studio?prompt=Independence%20Day%20celebration">Independence Day</a>
+                            <a class="btn btn-sm chip-btn" href="/Studio?prompt=Mega%20sale%20announcement">Mega Sale</a>
+                            <a class="btn btn-sm chip-btn" href="/Studio?prompt=School%20annual%20day%20function">School Event</a>
                         </div>
                     </div>
                 </div>
@@ -213,21 +289,22 @@
     </div>
 </div>
 
+<!-- Auto-detect confirmation modal -->
 <div class="modal fade" id="detectModal" tabindex="-1" aria-labelledby="detectTitle" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="detectTitle">Confirm areas</h5>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:14px; border:none;">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="detectTitle">Confirm areas</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <p class="small text-muted" id="detectIntro"></p>
-                <div id="detectList"></div>
-                <div class="form-text">Highlighted boxes are shown on the poster preview.</div>
+                <div id="detectList" class="mb-2"></div>
+                <div class="form-text">Tick/untick areas, then confirm below.</div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer border-0 pt-0">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger" id="detectConfirm">Apply</button>
+                <button type="button" class="btn btn-danger fw-semibold" id="detectConfirm">Apply</button>
             </div>
         </div>
     </div>
@@ -268,9 +345,17 @@
 
             function setTool(t) {
                 tool = t;
-                Object.keys(TOOL_IDS).forEach(k => TOOL_IDS[k].classList.toggle('active', k === t));
+                Object.keys(TOOL_IDS).forEach(k => {
+                    const btn = TOOL_IDS[k];
+                    btn.classList.toggle('active', k === t);
+                    if (k === t) {
+                        btn.className = 'tool-btn btn btn-' + TOOLS[k].cls;
+                    } else {
+                        btn.className = 'tool-btn btn btn-outline-' + TOOLS[k].cls;
+                    }
+                });
                 toolLabel.textContent = TOOLS[t].label;
-                toolLabel.className = 'text-' + TOOLS[t].cls;
+                toolLabel.className = 'badge text-bg-' + TOOLS[t].cls;
             }
 
             toolErase.addEventListener('click', () => { setTool('erase'); detectAndConfirm('text'); });
@@ -359,28 +444,32 @@
                 boxList.innerHTML = '';
                 boxes.forEach((b, i) => {
                     const div = document.createElement('div');
-                    div.className = 'input-group input-group-sm';
-                    const span = document.createElement('span');
-                    span.className = 'input-group-text text-' + (TOOLS[b.type] ? TOOLS[b.type].cls : 'danger');
-                    span.textContent = (TOOLS[b.type] ? TOOLS[b.type].label : b.type) + ' ' + (i + 1);
-                    const lbl = document.createElement('span');
-                    lbl.className = 'form-control';
-                    lbl.textContent = (b.x * 100).toFixed(0) + '% × ' + (b.y * 100).toFixed(0) + '% · ' + (b.w * 100).toFixed(0) + '% × ' + (b.h * 100).toFixed(0) + '%';
+                    div.className = 'd-flex align-items-center gap-2 p-2 rounded-2';
+                    div.style.background = 'rgba(0,0,0,.03)';
+
+                    const tag = document.createElement('span');
+                    tag.className = 'box-tag text-bg-' + (TOOLS[b.type] ? TOOLS[b.type].cls : 'danger');
+                    tag.textContent = (TOOLS[b.type] ? TOOLS[b.type].label : b.type);
+
+                    const info = document.createElement('span');
+                    info.className = 'small text-muted flex-grow-1';
+                    info.textContent = Math.round(b.x * 100) + '% x ' + Math.round(b.y * 100) + '%  ' + Math.round(b.w * 100) + '% x ' + Math.round(b.h * 100) + '%';
+
                     const btn = document.createElement('button');
                     btn.type = 'button';
-                    btn.className = 'btn btn-outline-danger';
-                    btn.textContent = '✕';
+                    btn.className = 'btn btn-sm btn-outline-danger border-0';
+                    btn.innerHTML = '&times;';
                     btn.addEventListener('click', () => { boxes.splice(i, 1); sync(); });
-                    div.appendChild(span);
-                    div.appendChild(lbl);
+
+                    div.appendChild(tag);
+                    div.appendChild(info);
                     div.appendChild(btn);
                     boxList.appendChild(div);
                 });
                 const n = t => boxes.filter(b => b.type === t).length;
                 boxCount.textContent = boxes.length === 0
-                    ? 'No areas marked yet.'
-                    : boxes.length + ' area' + (boxes.length === 1 ? '' : 's') + ' marked (erase: ' + n('erase') +
-                      ', del logo: ' + n('erase-logo') + ', keep: ' + n('keep') + ').';
+                    ? 'No areas marked'
+                    : boxes.length + ' area' + (boxes.length === 1 ? '' : 's') + ' (erase: ' + n('erase') + ', logo: ' + n('erase-logo') + ', keep: ' + n('keep') + ')';
             }
 
             canvas.addEventListener('mousedown', e => {
@@ -420,7 +509,7 @@
                     const image = new Image();
                     image.onload = () => {
                         img = image;
-                        const maxW = 420;
+                        const maxW = 440;
                         canvas.width = Math.min(maxW, image.naturalWidth);
                         canvas.height = Math.round(canvas.width * image.naturalHeight / image.naturalWidth);
                         canvasWrap.classList.remove('d-none');
@@ -450,7 +539,7 @@
                 const btn = kind === 'logos' ? toolLogos : toolErase;
                 const old = btn.textContent;
                 btn.disabled = true;
-                btn.textContent = 'Detecting…';
+                btn.textContent = 'Detecting...';
                 const fd = new FormData();
                 fd.append('upload', file);
                 fetch('/Templates/AutoDetect', { method: 'POST', body: fd })
@@ -509,7 +598,7 @@
                     list.appendChild(div);
                 });
                 const confirmBtn = document.getElementById('detectConfirm');
-                confirmBtn.className = 'btn btn-' + (isLogos ? 'warning' : 'danger');
+                confirmBtn.className = 'btn btn-' + (isLogos ? 'warning' : 'danger') + ' fw-semibold';
                 confirmBtn.textContent = isLogos ? 'Remove selected logos' : 'Erase selected areas';
                 render();
                 modal.show();
@@ -517,8 +606,8 @@
 
             function areaText(b) {
                 return (TOOLS[b.type] ? TOOLS[b.type].label : b.type) +
-                    ' · x ' + Math.round(b.x * 100) + '% · y ' + Math.round(b.y * 100) + '%' +
-                    ' · ' + Math.round(b.w * 100) + '% × ' + Math.round(b.h * 100) + '%';
+                    ' - x ' + Math.round(b.x * 100) + '% - y ' + Math.round(b.y * 100) + '%' +
+                    ' - ' + Math.round(b.w * 100) + '% x ' + Math.round(b.h * 100) + '%';
             }
 
             const detectModalEl = document.getElementById('detectModal');
@@ -570,7 +659,7 @@
 
                 aiApply.disabled = true;
                 const oldLabel = aiApply.textContent;
-                aiApply.textContent = 'Thinking…';
+                aiApply.textContent = 'Thinking...';
                 const fd = new FormData();
                 fd.append('__RequestVerificationToken', token());
                 fd.append('upload', file);
@@ -619,6 +708,11 @@
                 freshControls.classList.toggle('d-none', kind !== 'fresh');
                 tintLabel.textContent = tintRange.value + '%';
                 tintHidden.value = (parseInt(tintRange.value, 10) / 100).toFixed(2);
+
+                document.querySelectorAll('.treat-option').forEach(opt => {
+                    const radio = opt.querySelector('input[type="radio"]');
+                    opt.classList.toggle('selected', radio && radio.checked);
+                });
             }
 
             function setTreatment(t) {
