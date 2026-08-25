@@ -15,7 +15,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.10">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -24,9 +24,7 @@
     <PackageReference Include="SkiaSharp" Version="4.151.1" />
   </ItemGroup>
 
-  <!-- A stale instance of the app locks bin\...\DailyPosterGenerator.dll and fails the copy step.
-       Before every build, run the shared stop-stale script so the output DLL is never locked. -->
-  <Target Name="StopStaleInstances" BeforeTargets="Build">
+  <Target Name="StopStaleInstances" BeforeTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\.vscode\stop-stale.ps1&quot;" IgnoreExitCode="true" />
   </Target>
 
