@@ -1,17 +1,10 @@
 ﻿FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-
-# The project lives in a subdirectory - copy csproj first for layer caching
-COPY "Vasavi Analytics_Company SoftWare/SRKV_Poster_Software/*.csproj" ./proj/
-WORKDIR /src/proj
+COPY . .
+WORKDIR "/src/Vasavi Analytics_Company SoftWare/SRKV_Poster_Software"
 RUN dotnet restore
-
-# Copy all source
-COPY "Vasavi Analytics_Company SoftWare/SRKV_Poster_Software/" ./src/
-WORKDIR /src/proj
 RUN dotnet publish -c Release -o /app/publish --no-restore
 
-# Runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libfontconfig1 libharfbuzz0b libfreetype6 libjpeg62-turbo \
