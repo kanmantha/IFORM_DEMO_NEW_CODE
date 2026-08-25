@@ -1,8 +1,8 @@
 ﻿FROM mcr.microsoft.com/dotnet/sdk:10.0.100 AS build
 WORKDIR /src
-COPY . /src/app/
-WORKDIR /src/app/"Vasavi Analytics_Company SoftWare"/SRKV_Poster_Software
+COPY *.csproj ./
 RUN dotnet restore
+COPY . .
 RUN dotnet publish -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.100
